@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BEND_VERSION: 2.0.27
+  BEND_SHA256: 58adc86af6605ed0c48f7d84e4c23028f78893ce4a867a20a4f004b11582687b
+  SPEC_TESTS_VERSION: v1.7.0-beta.0
+  # Lighthouse commit for crypto/eth2_keystore/tests/eip2335_vectors.rs (tests/run_keys.py).
+  LIGHTHOUSE_REV: de4ef4002115b6f94a42868114cabd66f7273328
+  BEND_NO_TELEMETRY: 1
+  # Bend needs clang 19 or later. Ubuntu 24.04's default clang is 18.
+  CC: clang-19
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-19 libssl-dev libicu-dev python3-yaml
+
+      - name: Install Bend
+        run: |
+          name="bend-${BEND_VERSION}-linux-x64.tar.gz"
+          curl -fsSL --retry 3 -o "/tmp/$name" "https://github.com/bendlang/bend/releases/download/v${BEND_VERSION}/$name"
+          echo "${BEND_SHA256}  /tmp/$name" | sha256sum -c -
+          tar -xzf "/tmp/$name" -C /tmp
+          mkdir -p "$HOME/.bend/bin"
+          mv /tmp/bend/bend2 /tmp/bend/guide "$HOME/.bend/"
+          mv /tmp/bend/bin/bend "$HOME/.bend/bin/bend"
+          echo "BEND=$HOME/.bend/bin/bend" >> "$GITHUB_ENV"
+
+      - name: Cache spec tests
+        id: spec-cache
+        uses: actions/cache@v4
+        with:
+          path: spec-tests
+          key: ssz-static-${{ env.SPEC_TESTS_VERSION }}
+
+      - name: Download spec tests (ssz_static only)
+        if: steps.spec-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p spec-tests
+          for preset in mainnet minimal; do
+            curl -fsSL --retry 3 "https://github.com/ethereum/consensus-specs/releases/download/${SPEC_TESTS_VERSION}/${preset}.tar.gz" \
+              | tar -xz -C spec-tests --wildcards "tests/${preset}/*/ssz_static/*"
+          done
+
+      - name: Fetch the Lighthouse EIP-2335 vectors
+        run: |
+          mkdir -p lighthouse/crypto/eth2_keystore/tests
+          curl -fsSL --retry 3 -o lighthouse/crypto/eth2_keystore/tests/eip2335_vectors.rs \
+            "https://raw.githubusercontent.com/sigp/lighthouse/${LIGHTHOUSE_REV}/crypto/eth2_keystore/tests/eip2335_vectors.rs"
+          echo "LIGHTHOUSE=$PWD/lighthouse" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: tests/run_all.sh spec-tests/tests
+
+      # run_all.sh prints the proof result but does not fail on it. The
+      # checker must report exactly the open laws of LAWS.bend and nothing
+      # else. Lower the count here when a law gets its proof.
+      - name: Check proofs
+        run: |
+          out=$("$BEND" PROOF.bend 2>&1 | head -1 || true)
+          echo "$out"
+          [ "$out" = "Error: 6 TODOs found." ]

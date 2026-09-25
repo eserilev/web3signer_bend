@@ -1,5 +1,7 @@
 # Bulkhead
 
+[![ci](https://github.com/eserilev/bulkhead/actions/workflows/ci.yml/badge.svg)](https://github.com/eserilev/bulkhead/actions/workflows/ci.yml)
+
 Bulkhead is an Ethereum consensus-layer remote signer written in [Bend 2](https://github.com/bendlang/bend). It serves the eth2 signing API of Web3Signer. A validator client that works with Web3Signer works with Bulkhead with no change.
 
 A bulkhead is a wall that keeps one flooded part of a ship from sinking the rest. Bulkhead keeps validator keys and slashing rules apart from the validator client.
@@ -114,3 +116,7 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 ## Documents
 
 - [docs/SPEC.md](docs/SPEC.md): the specification, the draft laws, and the phase plan.
+
+## License
+
+Bulkhead is under the MIT license (`LICENSE`). `vendor/blst` is a copy of [blst](https://github.com/supranational/blst) v0.3.17, under its own Apache-2.0 license (`vendor/blst/LICENSE`).
