@@ -369,23 +369,44 @@ def Parse.emit(v: Json, stack: List<&2, Frame>, depth: Nat) -> PState:
         case FObj{fields, k}:
           PState{WCommaOrEnd{}, Con{FObj{Con{JField{k, v}, fields}, ""}, rest}, depth, None{}}
 
-def Parse.has_key(+k: String, fs: List<&2, JField>) -> Bool:
+# a <= b by character codes. The recursive call is a value of Bool.pick,
+# so it always runs, but it stops at the end of the shorter string.
+def Keys.le(a: String, b: String) -> Bool:
+  match a:
+    case SNil{}:
+      True{}
+    case SCon{+c, at}:
+      match b:
+        case SNil{}:
+          False{}
+        case SCon{+d, bt}:
+          Bool.pick(Bool, U32.is_lt(Lex.code(c), Lex.code(d)), True{},
+            Bool.pick(Bool, U32.is_eq(Lex.code(c), Lex.code(d)), Keys.le(at, bt), False{}))
+
+def Keys.of(fs: List<&2, JField>) -> List<&2, String>:
   match fs:
     case Nil{}:
-      False{}
+      Nil{}
     case Con{f, t}:
       match f:
-        case JField{fk, fv}:
-          String.eq(k, fk) || Parse.has_key(k, t)
+        case JField{k, v}:
+          Con{k, Keys.of(t)}
 
-def Parse.unique(fs: List<&2, JField>) -> Bool:
-  match fs:
+def Keys.distinct(ks: List<&2, String>) -> Bool:
+  match ks:
     case Nil{}:
       True{}
-    case Con{f, +t}:
-      match f:
-        case JField{k, v}:
-          Bool.not(Parse.has_key(k, t)) && Parse.unique(t)
+    case Con{a, +t}:
+      match t:
+        case Nil{}:
+          True{}
+        case Con{b, u}:
+          Bool.not(String.eq(a, b)) && Keys.distinct(Con{b, u})
+
+# No two fields have the same key. The keys are sorted first, so equal keys
+# are neighbors: a pairwise check takes time n^2, and a client controls n.
+def Parse.unique(fs: List<&2, JField>) -> Bool:
+  Keys.distinct(List.sort(~String, ~(a => b => Keys.le(a, b)), Keys.of(fs)))
 
 def Parse.close_obj(ok: Bool, fs: List<&2, JField>, rest: List<&2, Frame>, depth: Nat) -> PState:
   match ok:

@@ -24,10 +24,12 @@ type Header is Data:
 type HttpReq is Data:
   HttpReq{method: String, target: String, version: String, headers: List<&2, Header>, body: String}
 
-# More: the buffer has no complete request yet. Got: a request, and the
-# bytes after it. Bad: the request is invalid; answer status and close.
+# More: the buffer has no complete request yet, and missing is the number
+# of body characters still to come (0 while the head is not complete). Got:
+# a request, and the bytes after it. Bad: the request is invalid; answer
+# status and close.
 type Parse is Data:
-  More{}
+  More{missing: Nat}
   Got{req: HttpReq, rest: String}
   Bad{status: U32, reason: String}
 
@@ -234,14 +236,30 @@ def Http.body.ascii(ok: Bool, r: HttpReq, rest: String) -> Parse:
 # The request after its head: take Content-Length bytes of body, if the
 # buffer has them. Everything after the head must be ASCII first: with any
 # other character, a String length is not a byte length.
+# The body is complete: split it from the text after it. A match, not
+# Bool.pick, so that take and drop run only for a complete body.
+def Http.body.have(short: Bool, +n: Nat, +len: Nat, +m: String, +t: String, +v: String, +hs: List<&2, Header>, +rest: String) -> Parse:
+  match short:
+    case True{}:
+      More{Nat.sub(n, len)}
+    case False{}:
+      Http.body.ascii(Http.ascii(String.take(rest, n)), HttpReq{m, t, v, hs, String.take(rest, n)}, String.drop(rest, n))
+
+def Http.body.check(ok: Bool, +n: Nat, +len: Nat, +m: String, +t: String, +v: String, +hs: List<&2, Header>, +rest: String) -> Parse:
+  match ok:
+    case False{}:
+      Bad{400, "the request is not ASCII"}
+    case True{}:
+      Http.body.have(Nat.is_lt(len, n), n, len, m, t, v, hs, rest)
+
+# More{missing} gives the number of characters that the body still needs,
+# so that the connection loop can wait for them before it parses again.
 def Http.body(+m: String, +t: String, +v: String, +hs: List<&2, Header>, +rest: String, cl: Maybe<&2, Nat>) -> Parse:
   match cl:
     case None{}:
       Bad{400, "invalid Content-Length"}
     case Some{+n}:
-      Bool.pick(Parse, Bool.not(Http.ascii(rest)), Bad{400, "the request is not ASCII"},
-      Bool.pick(Parse, Nat.is_lt(String.length(rest), n), More{},
-        Http.body.ascii(Http.ascii(String.take(rest, n)), HttpReq{m, t, v, hs, String.take(rest, n)}, String.drop(rest, n))))
+      Http.body.check(Http.ascii(rest), n, String.length(rest), m, t, v, hs, rest)
 
 def Http.content_length(+hs: List<&2, Header>) -> Maybe<&2, Nat>:
   Maybe.default(&2, Maybe<&2, Nat>, Maybe.map(&2, String, Maybe<&2, Nat>, s => Http.nat(s), Http.find(hs, "content-length")), Some{0n})
@@ -297,7 +315,7 @@ def Http.from_lines(ls: List<&2, String>, +rest: String) -> Parse:
 def Http.from_head(h: Head, +whole: String) -> Parse:
   match h:
     case NoHead{}:
-      Bool.pick(Parse, Nat.is_lt(Http.max_head(), String.length(whole)), Bad{431, "the request head is too large"}, More{})
+      Bool.pick(Parse, Nat.is_lt(Http.max_head(), String.length(whole)), Bad{431, "the request head is too large"}, More{0n})
     case Head{+head, rest}:
       Bool.pick(Parse, Http.ascii(head), Http.from_lines(Http.lines(head), rest),
         Bad{400, "the request head is not ASCII"})

@@ -486,6 +486,11 @@ These facts come from the Bend 2 repository, version 2.0.27.
 - **Interchange**: The EIP-3076 test vectors (`eth-clients/slashing-protection-interchange-tests`).
 - **End to end**: Lighthouse `testing/web3signer_tests`. This harness compares the signatures of a local key and a remote signer for each message type. It needs two changes: an environment variable that sets the signer binary and its arguments, and a plain-HTTP mode. Today it downloads Web3Signer and connects with mutual TLS.
 - **Devnet**: A Kurtosis devnet where Lighthouse uses Bulkhead for all its keys.
+- **Differential fuzzing** (`tests/fuzz_requests.py`): The fuzzer changes Lighthouse request bodies at random: values, keys, types, signing roots, bitlists, and raw characters. A Python model of sections 6 and 7 decodes each body too. Bulkhead and the model must accept the same bodies and give the same roots, and each body must finish within 1 s. Before it starts, the model must give Lighthouse's root for each Lighthouse body. CI runs 3000 bodies with a fixed seed.
+- **Worst-case bodies** (`tests/run_server.py`): Bodies near the 1 MiB limit, with many keys, long strings, long arrays, and deep nesting. Each one gets a response within 2 s.
+- **Crash tests** (`tests/run_crash.py`): Clients send conflicting attestations and blocks while a thread kills Bulkhead with SIGKILL and starts it again. `tests/crash_shim.c` keeps each log write in memory until its fsync, so a kill loses what a power loss loses. No two signed messages can be slashable together, and each signed message must be in the log.
+
+The fuzzer and the worst-case bodies found three faults that took time n^2 on a client-controlled n: the duplicate-key check of the JSON parser, the parse of the whole buffer on each TCP read, and a `Bool.pick` in the lexer. Section 11 has the rule that prevents the last one.
 
 ### 13.2 Phases
 

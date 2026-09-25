@@ -73,6 +73,12 @@ You need Bend 2.0.27, clang, OpenSSL, ICU, and Python 3 with PyYAML. Set `BEND` 
 BEND=~/.bend/bin/bend tests/run_all.sh <path to consensus-spec-tests/tests>
 ```
 
+`run_all.sh` also runs the differential fuzzer with a fixed seed, and the crash tests. For a longer fuzz run, give the number of bodies and a seed:
+
+```sh
+tests/fuzz_requests.py 100000 1234
+```
+
 The suites:
 
 | Suite | Checks |
@@ -83,7 +89,9 @@ The suites:
 | `tests/run_requests.py` | Request decoding and signing roots against bodies and roots from Lighthouse's own code, plus mutations of those bodies. |
 | `tests/run_store.py` | Store decisions over many keys against a Python model, replay of the written log, log line round trips, and torn logs. |
 | `tests/run_keys.py` | Key loading: keystores and a raw key made by Lighthouse's own code, the EIP-2335 vectors, and bad key directories. |
-| `tests/run_server.py` | The server end to end: signing against independent root and signature oracles, slashing refusals, restarts, torn and corrupt logs, and HTTP edge cases. |
+| `tests/run_server.py` | The server end to end: signing against independent root and signature oracles, slashing refusals, restarts, torn and corrupt logs, HTTP edge cases, and worst-case bodies near the 1 MiB limit. |
+| `tests/fuzz_requests.py` | Random changes to Lighthouse bodies. Bulkhead and a Python model of the spec must accept the same bodies and give the same roots, within 1 s each. |
+| `tests/run_crash.py` | SIGKILL at random times under conflicting load, with `tests/crash_shim.c` to drop writes that no fsync covered. No slashable pair gets signed, and each signed message is in the log. |
 
 `tools/lh-vectors` writes `tests/vectors/lighthouse_requests.jsonl`. It needs a Lighthouse checkout next to this one (`../lighthouse`).
 

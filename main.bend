@@ -336,15 +336,16 @@ def Conn.send_resp(r: Resp, close: Bool) -> String:
     case Resp{status, ctype, body}:
       H.Http.response(status, ctype, body, close)
 
+# have is the length of buf. The loop parses buf again only when it has
+# the characters that the last parse was missing: parsing on each read
+# costs time n^2 for a body of n characters.
 @unsafe def Conn.loop(sock: Socket, +buf: String, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
-  Conn.parsed(sock, H.Http.parse(buf), buf, ctx, jobs)
+  Conn.parsed(sock, H.Http.parse(buf), buf, String.length(buf), ctx, jobs)
 
-@unsafe def Conn.parsed(sock: Socket, p: H.Parse, +buf: String, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
+@unsafe def Conn.parsed(sock: Socket, p: H.Parse, +buf: String, +have: Nat, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
   match p:
-    case H.More{}:
-      do IO<Unit>:
-        rr : Socket & Result<&1, &1, U32 & String, Maybe<&1, String>> <- TCP.poll(sock, 65536, 60000)
-        Conn.read(rr, buf, ctx, jobs)
+    case H.More{missing}:
+      Conn.wait(sock, [buf], have, Nat.add(have, missing), ctx, jobs)
     case H.Bad{c, why}:
       do IO<Unit>:
         sent : Socket & Result<&1, &1, U32 & String, Unit> <- TCP.send(sock, H.Http.response(c, H.Http.text(), why, True{}))
@@ -355,6 +356,13 @@ def Conn.send_resp(r: Resp, close: Bool) -> String:
         +close : Bool = H.Http.closes(req)
         sent : Socket & Result<&1, &1, U32 & String, Unit> <- TCP.send(sock, Conn.send_resp(resp, close))
         Conn.after(close, sent, rest, ctx, jobs)
+
+# parts holds the reads so far, the newest first. have is their total
+# length, and need is the length that the next parse needs.
+@unsafe def Conn.wait(sock: Socket, +parts: List<&2, String>, +have: Nat, +need: Nat, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
+  do IO<Unit>:
+    rr : Socket & Result<&1, &1, U32 & String, Maybe<&1, String>> <- TCP.poll(sock, 65536, 60000)
+    Conn.read(rr, parts, have, need, ctx, jobs)
 
 @unsafe def Conn.close(sent: Socket & Result<&1, &1, U32 & String, Unit>) -> IO(Unit):
   (s, r) = sent
@@ -375,15 +383,29 @@ def Conn.send_resp(r: Resp, close: Bool) -> String:
     case Done{u}:
       Conn.loop(s, rest, ctx, jobs)
 
+def Conn.join(ps: List<&2, String>) -> String:
+  match ps:
+    case Nil{}:
+      ""
+    case Con{h, t}:
+      h ++ Conn.join(t)
+
+@unsafe def Conn.next(short: Bool, s: Socket, +parts: List<&2, String>, +have: Nat, +need: Nat, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
+  match short:
+    case True{}:
+      Conn.wait(s, parts, have, need, ctx, jobs)
+    case False{}:
+      Conn.loop(s, Conn.join(List.reverse(&2, String, parts)), ctx, jobs)
+
 # An empty read is the end of the stream.
-@unsafe def Conn.got(eof: Bool, s: Socket, +buf: String, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
+@unsafe def Conn.got(eof: Bool, s: Socket, +parts: List<&2, String>, +have: Nat, +need: Nat, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
   match eof:
     case True{}:
       Socket.close(s)
     case False{}:
-      Conn.loop(s, buf, ctx, jobs)
+      Conn.next(Nat.is_lt(have, need), s, parts, have, need, ctx, jobs)
 
-@unsafe def Conn.read(rr: Socket & Result<&1, &1, U32 & String, Maybe<&1, String>>, +buf: String, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
+@unsafe def Conn.read(rr: Socket & Result<&1, &1, U32 & String, Maybe<&1, String>>, +parts: List<&2, String>, +have: Nat, +need: Nat, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
   (s, r) = rr
   match r:
     case Fail{e}:
@@ -393,7 +415,7 @@ def Conn.send_resp(r: Resp, close: Bool) -> String:
         case None{}:
           Socket.close(s)
         case Some{+data}:
-          Conn.got(String.is_empty(data), s, buf ++ data, ctx, jobs)
+          Conn.got(String.is_empty(data), s, Con{data, parts}, Nat.add(have, String.length(data)), need, ctx, jobs)
 
 @unsafe def Accept.loop(l: Listener, +ctx: Ctx, +jobs: Chan(Job)) -> IO(Unit):
   do IO<Unit>:

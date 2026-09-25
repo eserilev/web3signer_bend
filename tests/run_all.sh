@@ -25,8 +25,10 @@ echo "== ssz";      "$root/tests/run_ssz.py" "$vectors"
 echo "== laws";     "$root/tests/run_laws.py" 2000
 echo "== json";     "$root/tests/run_json.py"
 echo "== requests"; "$root/tests/run_requests.py"
+echo "== fuzz";     "$root/tests/fuzz_requests.py" 3000 7916
 echo "== store";    "$root/tests/run_store.py" 2000
 echo "== keys";     "$root/tests/run_keys.py" "${LIGHTHOUSE:-$root/../lighthouse}"
 echo "== server";   "$root/tests/run_server.py"
+echo "== crash";    "$root/tests/run_crash.py" 30
 echo "== proofs"
 "$bend" "$root/PROOF.bend" 2>&1 | head -1 || true

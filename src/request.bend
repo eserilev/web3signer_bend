@@ -467,22 +467,24 @@ def Dec.registration(+body: J.Json, +net: Net) -> Result<&2, &2, String, Msg>:
     r : S.Registration <- Req.need(S.Registration, Dec.registration_of(oj), "invalid validator_registration")
     return MRegistration{r, Net.genesis_version(net)}
 
-def Dec.is_registration(+t: String) -> Bool:
-  Str.is(t, "VALIDATOR_REGISTRATION")
+# u is the type in upper case. Each decoder compares it with String.eq, so
+# the type is upper-cased once, not once for each name.
+def Dec.is_registration(+u: String) -> Bool:
+  String.eq(u, "VALIDATOR_REGISTRATION")
 
 # Picks the decoder as a function, so that only the decoder for the type
 # runs: Bool.pick evaluates both of its values.
-def Dec.msg(+t: String) -> (J.Json -> Net -> Result<&2, &2, String, Msg>):
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "ATTESTATION"), b => n => Dec.attestation(b),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "BLOCK_V2"), b => n => Dec.block(b),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "RANDAO_REVEAL"), b => n => Dec.randao(b),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "AGGREGATION_SLOT"), b => n => Dec.agg_slot(b),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "AGGREGATE_AND_PROOF") || Str.is(t, "AGGREGATE_AND_PROOF_V2"), b => n => Dec.aggregate(b, n),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "SYNC_COMMITTEE_MESSAGE"), b => n => Dec.sync_msg(b),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "SYNC_COMMITTEE_SELECTION_PROOF"), b => n => Dec.sync_sel(b),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF"), b => n => Dec.contribution_msg(b, n),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Str.is(t, "VOLUNTARY_EXIT"), b => n => Dec.exit(b, n),
-  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Dec.is_registration(t), b => n => Dec.registration(b, n),
+def Dec.msg(+u: String) -> (J.Json -> Net -> Result<&2, &2, String, Msg>):
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "ATTESTATION"), b => n => Dec.attestation(b),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "BLOCK_V2"), b => n => Dec.block(b),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "RANDAO_REVEAL"), b => n => Dec.randao(b),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "AGGREGATION_SLOT"), b => n => Dec.agg_slot(b),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "AGGREGATE_AND_PROOF") || String.eq(u, "AGGREGATE_AND_PROOF_V2"), b => n => Dec.aggregate(b, n),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "SYNC_COMMITTEE_MESSAGE"), b => n => Dec.sync_msg(b),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "SYNC_COMMITTEE_SELECTION_PROOF"), b => n => Dec.sync_sel(b),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF"), b => n => Dec.contribution_msg(b, n),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, String.eq(u, "VOLUNTARY_EXIT"), b => n => Dec.exit(b, n),
+  Bool.pick(J.Json -> Net -> Result<&2, &2, String, Msg>, Dec.is_registration(u), b => n => Dec.registration(b, n),
   b => n => Fail{"unsupported type"}))))))))))
 
 # signingRoot
@@ -563,9 +565,10 @@ def Request.make(msg: Msg, fg: ForkInfo, claimed: Maybe<&2, S.B32>) -> Request:
 def Request.decode_json(+body: J.Json, +net: Net) -> Result<&2, &2, String, Request>:
   do Result<&2, &2, String, Request>:
     tj : J.Json <- Req.need(J.Json, J.Json.get(body, "type"), "missing type")
-    +t : String <- Req.need(String, J.Json.str(tj), "invalid type")
-    msg : Msg <- Dec.msg(t)(body)(net)
-    fg : ForkInfo <- Dec.fork_info_for(Dec.is_registration(t), body)
+    t : String <- Req.need(String, J.Json.str(tj), "invalid type")
+    +u : String = Str.upper(t)
+    msg : Msg <- Dec.msg(u)(body)(net)
+    fg : ForkInfo <- Dec.fork_info_for(Dec.is_registration(u), body)
     claimed : Maybe<&2, S.B32> <- Dec.claimed(body)
     return Request.make(msg, fg, claimed)
 

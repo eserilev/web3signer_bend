@@ -216,6 +216,27 @@ check("other key is separate", s.sign(PK2, block(400, state_root="0x" + "66" * 3
 check("other gvr", s.sign(PK, att(50, 51, gvr="0x" + "22" * 32))[2] == "genesis validators root does not match the database")
 check("other gvr, randao", s.sign(PK, randao(15, gvr="0x" + "22" * 32))[0] == 412)
 
+# Worst-case bodies near the 1 MiB limit. Each one gets a response within
+# 2 s. The fuzzer (tests/fuzz_requests.py) covers smaller bodies.
+big_base = json.loads(att(70, 71))
+worst = {
+    "many keys": json.dumps({**big_base, **{f"k{i}": 0 for i in range(80_000)}}),
+    "many small objects": json.dumps({**big_base, "x": [{"a": 1, "b": 2}] * 55_000}),
+    "long string": json.dumps({**big_base, "x": "a" * 1_000_000}),
+    "long escaped string": json.dumps(big_base)[:-1] + ',"x":"' + "\\u0041" * 170_000 + '"}',
+    "long array": json.dumps({**big_base, "x": [0] * 330_000}),
+    "long number": json.dumps(big_base)[:-1] + ',"x":' + "9" * 1_000_000 + "}",
+    "deep nesting": json.dumps(big_base)[:-1] + ',"x":' + "[" * 500_000 + "]" * 500_000 + "}",
+    "long type": json.dumps({**big_base, "type": "A" * 1_000_000}),
+}
+for name, body in worst.items():
+    assert len(body) <= 1048576, (name, len(body))
+    t0 = time.time()
+    status = s.sign(PK, body)[0]
+    elapsed = time.time() - t0
+    print(f"1 MiB worst case: {name}: {elapsed:.2f} s, status {status}")
+    check(f"1 MiB worst case: {name} ({elapsed:.2f} s, status {status})", elapsed < 2.0 and status in (200, 400))
+
 # HTTP: keep-alive, pipelining, split writes, bad requests.
 def raw(data_parts, read_until_close=True):
     c = socket.create_connection(("127.0.0.1", port), timeout=10)
