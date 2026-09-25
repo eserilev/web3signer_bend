@@ -1,0 +1,51 @@
+diff --git a/src/vc/lighthouse.star b/src/vc/lighthouse.star
+index c47fb6c..064b04f 100644
+--- a/src/vc/lighthouse.star
++++ b/src/vc/lighthouse.star
+@@ -142,5 +142,30 @@ def get_config(
+         "lighthouse",
+     )
+ 
++    # With a remote signer, the VC gets a validator_definitions.yml with one
++    # web3signer entry for each key. The key directories are named by public
++    # key. The script writes the file, then starts the VC.
++    if remote_signer_context != None:
++        remote_validators_dir = "/tmp/lh-vc"
++        vc_cmd = []
++        for arg in config_args["cmd"]:
++            if arg.startswith("--validators-dir="):
++                vc_cmd.append("--validators-dir=" + remote_validators_dir)
++            elif arg.startswith("--secrets-dir="):
++                continue
++            else:
++                vc_cmd.append(arg)
++        script = " ".join([
++            "set -e;",
++            "mkdir -p {0};".format(remote_validators_dir),
++            "for d in {0}/0x*; do".format(validator_keys_dirpath),
++            "pk=$(basename $d);",
++            "printf -- '- enabled: true\\n  voting_public_key: \"%s\"\\n  type: web3signer\\n  url: \"%s\"\\n' $pk {0};".format(remote_signer_context.http_url),
++            "done > {0}/validator_definitions.yml;".format(remote_validators_dir),
++            "exec " + " ".join(vc_cmd),
++        ])
++        config_args["entrypoint"] = ["sh", "-c"]
++        config_args["cmd"] = [script]
++
+     vc_shared.apply_resource_limits(config_args, participant)
+     return ServiceConfig(**config_args)
+diff --git a/src/vc/vc_launcher.star b/src/vc/vc_launcher.star
+index 6bc1a5f..0b8d048 100644
+--- a/src/vc/vc_launcher.star
++++ b/src/vc/vc_launcher.star
+@@ -94,10 +94,7 @@ def get_vc_config(
+ 
+     keymanager_enabled = participant.keymanager_enabled
+ 
+-    if vc_type == constants.VC_TYPE.lighthouse:
+-        if remote_signer_context != None:
+-            fail("`use_remote_signer` flag not supported for lighthouse VC")
+-    elif vc_type == constants.VC_TYPE.vero:
++    if vc_type == constants.VC_TYPE.vero:
+         if remote_signer_context == None:
+             fail("vero VC requires `use_remote_signer` to be true")
+         if keymanager_enabled:

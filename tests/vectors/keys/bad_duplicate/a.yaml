@@ -1,0 +1,4 @@
+type: "file-keystore"
+keyType: "BLS"
+keystoreFile: "a.json"
+keystorePasswordFile: "a.password"

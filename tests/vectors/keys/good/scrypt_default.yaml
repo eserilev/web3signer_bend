@@ -1,0 +1,4 @@
+type: "file-keystore"
+keyType: "BLS"
+keystoreFile: "scrypt_default.json"
+keystorePasswordFile: "scrypt_default.password"

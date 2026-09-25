@@ -1,0 +1,4 @@
+type: "file-keystore"
+keyType: "BLS"
+keystoreFile: "pbkdf2_nfkd.json"
+keystorePasswordFile: "pbkdf2_nfkd.password"

@@ -1,0 +1,48 @@
+[package]
+name = "lh-signer-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Lighthouse's web3signer_tests, adapted to run the Lighthouse validator store against Bulkhead."
+
+# The path dependencies expect a Lighthouse checkout next to the bulkhead
+# checkout: ../lighthouse from the bulkhead root.
+[dev-dependencies]
+account_utils = { path = "../../../lighthouse/common/account_utils" }
+async-channel = "1.9.0"
+bls = { path = "../../../lighthouse/crypto/bls" }
+eth2 = { path = "../../../lighthouse/common/eth2" }
+eth2_keystore = { path = "../../../lighthouse/crypto/eth2_keystore" }
+eth2_network_config = { path = "../../../lighthouse/common/eth2_network_config" }
+fixed_bytes = { path = "../../../lighthouse/consensus/fixed_bytes" }
+futures = "0.3"
+initialized_validators = { path = "../../../lighthouse/validator_client/initialized_validators" }
+lighthouse_validator_store = { path = "../../../lighthouse/validator_client/lighthouse_validator_store" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+slashing_protection = { path = "../../../lighthouse/validator_client/slashing_protection" }
+slot_clock = { path = "../../../lighthouse/common/slot_clock" }
+ssz_types = { version = "0.14.0", features = ["context_deserialize", "runtime_types"] }
+task_executor = { path = "../../../lighthouse/common/task_executor" }
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "signal", "macros", "time"] }
+types = { path = "../../../lighthouse/consensus/types", features = ["saturating-arith"] }
+url = "2"
+validator_store = { path = "../../../lighthouse/validator_client/validator_store" }
+yaml_serde = "0.10"
+
+[workspace]
+
+# Lighthouse's own [patch.crates-io] section. A separate crate does not inherit
+# workspace patches, so this list must match ../lighthouse/Cargo.toml.
+[patch.crates-io]
+# FIXME(eip-7688): EIP-7688 development patches
+ssz_types = { git = "https://github.com/sigp/ssz_types", rev = "9203d56ad2d7bc5f12133d043e085843f81edcd6" }
+milhouse = { git = "https://github.com/sigp/milhouse", rev = "c70f128976ac0d60ea65a978dabd117a921c36ee" }
+ethereum_ssz = { git = "https://github.com/sigp/ethereum_ssz", rev = "2059c21ba52cd3a7e39a8ad537012b761812a393" }
+ethereum_ssz_derive = { git = "https://github.com/sigp/ethereum_ssz", rev = "2059c21ba52cd3a7e39a8ad537012b761812a393" }
+tree_hash = { git = "https://github.com/sigp/tree_hash", rev = "03d9fa474586c125f306dd7a00cf46284575a01f" }
+tree_hash_derive = { git = "https://github.com/sigp/tree_hash", rev = "03d9fa474586c125f306dd7a00cf46284575a01f" }
+# Temporary patch until the axum migration is complete
+warp = { git = "https://github.com/macladson/warp", rev = "6f5f21beab6a240e59470caaab56afd46d46b709" }
+

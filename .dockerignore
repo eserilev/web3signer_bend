@@ -1,0 +1,3 @@
+*
+!build/bulkhead
+!docker/entrypoint.sh

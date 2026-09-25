@@ -1,0 +1,27 @@
+# Build output
+/build/
+target/
+*.o
+*.a
+*.so
+
+# Files that `bend x.bend -o x.c` and the spike leave next to their sources
+spike/phase0/*.c
+!spike/phase0/bls.c
+spike/phase0/sign
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Test runs
+*.log
+slashing.log
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

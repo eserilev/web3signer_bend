@@ -1,0 +1,34 @@
+# A three-node devnet. Nodes 1 and 2 sign through Bulkhead (the
+# bulkhead:local image, see docker/Dockerfile): node 1 with a Lighthouse
+# validator client, node 2 with a Teku validator client. Node 3 signs with
+# local keys. Each node has a third of the validators, so the chain
+# finalizes only if the attestations that Bulkhead signs count.
+#
+# ethereum-package does not support a remote signer for the Lighthouse VC.
+# Apply devnet/ethereum-package-lighthouse-remote-signer.patch to a checkout
+# of ethereum-package, then:
+#
+#   kurtosis run --enclave bulkhead <ethereum-package checkout> \
+#     --args-file devnet/kurtosis.yaml
+participants:
+  - el_type: geth
+    cl_type: lighthouse
+    vc_type: lighthouse
+    use_remote_signer: true
+    remote_signer_image: bulkhead:local
+    validator_count: 64
+  - el_type: geth
+    cl_type: lighthouse
+    vc_type: teku
+    use_remote_signer: true
+    remote_signer_image: bulkhead:local
+    validator_count: 64
+  - el_type: geth
+    cl_type: lighthouse
+    vc_type: lighthouse
+    validator_count: 64
+    # PeerDAS (Fulu) needs a node that keeps every data column.
+    supernode: true
+network_params:
+  preset: minimal
+additional_services: []

@@ -1,0 +1,35 @@
+[package]
+name = "lh-vectors"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Writes Web3Signer request bodies and signing roots with Lighthouse's own types, as test vectors for Bulkhead."
+
+# The path dependencies expect a Lighthouse checkout next to the bulkhead
+# checkout: ../lighthouse from the bulkhead root.
+[dependencies]
+bls = { path = "../../../lighthouse/crypto/bls" }
+eth2_keystore = { path = "../../../lighthouse/crypto/eth2_keystore" }
+ethereum_ssz = "0.10.0"
+hex = "0.4"
+serde_json = "1"
+signing_method = { path = "../../../lighthouse/validator_client/signing_method" }
+ssz_types = "0.14.0"
+typenum = "1"
+types = { path = "../../../lighthouse/consensus/types" }
+
+[workspace]
+
+# Lighthouse's own [patch.crates-io] section. A separate crate does not inherit
+# workspace patches, so this list must match ../lighthouse/Cargo.toml.
+[patch.crates-io]
+# FIXME(eip-7688): EIP-7688 development patches
+ssz_types = { git = "https://github.com/sigp/ssz_types", rev = "9203d56ad2d7bc5f12133d043e085843f81edcd6" }
+milhouse = { git = "https://github.com/sigp/milhouse", rev = "c70f128976ac0d60ea65a978dabd117a921c36ee" }
+ethereum_ssz = { git = "https://github.com/sigp/ethereum_ssz", rev = "2059c21ba52cd3a7e39a8ad537012b761812a393" }
+ethereum_ssz_derive = { git = "https://github.com/sigp/ethereum_ssz", rev = "2059c21ba52cd3a7e39a8ad537012b761812a393" }
+tree_hash = { git = "https://github.com/sigp/tree_hash", rev = "03d9fa474586c125f306dd7a00cf46284575a01f" }
+tree_hash_derive = { git = "https://github.com/sigp/tree_hash", rev = "03d9fa474586c125f306dd7a00cf46284575a01f" }
+# Temporary patch until the axum migration is complete
+warp = { git = "https://github.com/macladson/warp", rev = "6f5f21beab6a240e59470caaab56afd46d46b709" }
+
