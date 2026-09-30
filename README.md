@@ -48,6 +48,8 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 
 ## Laws with proofs
 
+17 of the 23 laws in `LAWS.bend` have proofs. The main result: from an empty state, one key never signs two messages that are slashable together, and a decision on one key never changes another key.
+
 | Group | Laws |
 |---|---|
 | Signing root | `signs_computed_root`, `rejects_bad_root`, `accepts_own_root` |
@@ -56,11 +58,9 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 | Liveness | `block_signs_when_clear`, `att_signs_when_clear` |
 | Store | `store_att_is_key_decision`, `store_block_is_key_decision`, `store_other_keys` |
 
-Together, these proofs give the main result: from an empty state, no two messages that one key signs are slashable together, and a store decision on one key acts as the key-level decision and does not change other keys.
+The 6 open laws are about the log encoding and number encoding. The tests cover them.
 
-### Open laws
-
-`event_roundtrip`, `log_roundtrip`, `u64_cmp`, `u64_show_read`, `b32_hex` and `u64_shrn`. They are about numbers and text encoding. Their proofs need lemmas about `U32` division, multiplication and bit operations, which Base does not have. The test suites cover them (`run_ssz.py`, `run_store.py`).
+[proof/README.md](proof/README.md) states each law in plain words, and lists what the proofs trust and what they do not cover.
 
 ## Development
 
@@ -111,7 +111,7 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 
 `LAWS.bend` and the files in `spec/` belong to the project owner. The code and `PROOF.bend` must satisfy them, and they do not edit them. `spec/safety.bend` defines "slashable" and "safe" from the consensus spec. `spec/signing.bend` holds the definitions for the signing-root laws. `LAWS.bend` states the laws with these definitions.
 
-`bend PROOF.bend` checks every proof. It prints the number of open laws until all of them have proofs. `proof/lemmas.bend` holds the general lemmas about `Bool`, `Word`, `U32`, `U64`, `B32` and `Pubkey`.
+`bend PROOF.bend` checks every proof. It prints the number of open laws until all of them have proofs. `proof/lemmas.bend` holds the general lemmas about `Bool`, `Word`, `U32`, `U64`, `B32` and `Pubkey`. [proof/README.md](proof/README.md) explains what the laws prove.
 
 ## What is different
 
@@ -122,6 +122,7 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 ## Documents
 
 - [docs/SPEC.md](docs/SPEC.md): the specification, the draft laws, and the phase plan.
+- [proof/README.md](proof/README.md): what the laws state and what the proofs prove.
 
 ## License
 

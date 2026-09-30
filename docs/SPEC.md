@@ -401,6 +401,16 @@ Version 1 has these flags:
 
 A human writes `LAWS.bend` and owns it. The AI writes `PROOF.bend` and the code, and it does not edit `LAWS.bend`. The laws below are drafts for the owner to review. They are English statements, not Bend syntax yet.
 
+> **Note:** `LAWS.bend` holds the real laws, and [proof/README.md](../proof/README.md) explains them. Some drafts below have different names or a different split in `LAWS.bend`:
+>
+> - L4 `decide_keeps_safe` is `block_keeps_safe` and `att_keeps_safe`.
+> - L5 `decide_records` is `block_recorded`, `att_recorded`, `block_keeps_records`, and `att_keeps_records`.
+> - L6 `replay_equals_state` is `event_roundtrip`, `log_roundtrip`, `store_att_is_key_decision`, `store_block_is_key_decision`, and `store_other_keys`.
+> - L9 `watermark_monotone` is `block_respects_mark` and `att_respects_mark`. The `keeps_records` laws also state that a decision never changes a watermark.
+> - L11 `u64_model` is `u64_cmp` and `u64_show_read`. L12 `hex_roundtrip` is `b32_hex`. L13 `slot_epoch` is `u64_shrn`.
+> - `LAWS.bend` also has `accepts_own_root`, `block_signs_when_clear`, and `att_signs_when_clear`. These laws have no draft here.
+> - L7, L8, and L10 are not stated in `LAWS.bend` yet.
+
 ### 10.1 Signing root
 
 - **L1 `signs_computed_root`**: For each request that `decide` accepts, the root that the shell signs equals `signing_root(object, domain)` from the parsed request.
