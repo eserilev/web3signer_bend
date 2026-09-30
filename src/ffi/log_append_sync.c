@@ -1,7 +1,7 @@
 // Log.append_sync: appends text to a file, then calls fsync. The effect
 // returns only after fsync returns, on a helper thread.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 typedef struct {
   char* path;

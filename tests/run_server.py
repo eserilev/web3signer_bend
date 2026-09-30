@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""End-to-end tests of the Bulkhead server (main.bend).
+"""End-to-end tests of the web3signer_bend server (main.bend).
 
     ./tests/run_server.py
 
-Needs build/bulkhead, build/tests/request_cli and build/phase0/sign.
+Needs build/web3signer_bend, build/tests/request_cli and build/phase0/sign.
 
 Oracles, each tested against Lighthouse elsewhere:
 - request_cli computes the signing root of a body (tests/run_requests.py).
@@ -25,7 +25,7 @@ import http.client
 
 here = pathlib.Path(__file__).resolve().parent
 root = here.parent
-bulkhead = str(root / "build/bulkhead")
+web3signer_bend = str(root / "build/web3signer_bend")
 request_cli = str(root / "build/tests/request_cli")
 signer = str(root / "build/phase0/sign")
 keys_dir = str(here / "vectors/keys/good")
@@ -101,7 +101,7 @@ class Server:
     def __init__(self, log, port, keys=keys_dir):
         self.port = port
         self.proc = subprocess.Popen(
-            [bulkhead, "--key-config-path", keys, "--slashing-log", log, "--http-listen-port", str(port)],
+            [web3signer_bend, "--key-config-path", keys, "--slashing-log", log, "--http-listen-port", str(port)],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         self.banner = self.proc.stdout.readline()
         for _ in range(100):
@@ -305,7 +305,7 @@ expect_sig("after restart: repeat still signs", s.sign(PK, att(30, 40)), PK, att
 check("after restart: gvr still bound", s.sign(PK, randao(16, gvr="0x" + "22" * 32))[0] == 412)
 s.stop()
 
-# A torn last line: Bulkhead starts, drops it, and appends on a new line.
+# A torn last line: web3signer_bend starts, drops it, and appends on a new line.
 with open(log, "a") as f:
     f.write("A 0x" + "ab" * 48 + " 1 2 0x12")
 s = Server(log, port)
@@ -315,7 +315,7 @@ expect_sig("torn tail: signs", s.sign(PK, att(200, 201)), PK, att(200, 201))
 s.stop()
 check("torn tail: log still parses", all(line.split()[0] in "GBA" for line in pathlib.Path(log).read_text().splitlines()))
 
-# A corrupt complete line: Bulkhead does not start.
+# A corrupt complete line: web3signer_bend does not start.
 with open(log, "a") as f:
     f.write("B not-a-key 1 -\n")
 s = Server(log, port)

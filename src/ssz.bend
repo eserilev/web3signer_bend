@@ -1,7 +1,7 @@
-# SSZ for Bulkhead: 64-bit numbers, 32-byte chunks, SHA-256 over two chunks,
+# SSZ for web3signer_bend: 64-bit numbers, 32-byte chunks, SHA-256 over two chunks,
 # byte strings, bitlists and bitvectors, merkleization with a limit and
 # progressive merkleization, and the hash tree roots of the containers that
-# Bulkhead signs. Each root is a tree of 64-byte hashes, so this file needs
+# web3signer_bend signs. Each root is a tree of 64-byte hashes, so this file needs
 # no general-length SHA-256.
 import Base
 

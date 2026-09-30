@@ -5,8 +5,8 @@
 #   keystoreFile: "k.json"              privateKey: "0x..."
 #   keystorePasswordFile: "k.password"
 #
-# Bulkhead reads the files here and decrypts in C (src/ffi.bend). A key that
-# does not load stops Bulkhead at start: a signer that silently misses a key
+# web3signer_bend reads the files here and decrypts in C (src/ffi.bend). A key that
+# does not load stops web3signer_bend at start: a signer that silently misses a key
 # is worse than one that does not start.
 import Base
 import ./ssz.bend as S
@@ -246,7 +246,7 @@ def Keystore.decode(+j: J.Json) -> Result<&2, &2, String, Keystore>:
 # Loading
 # =======
 
-# Stops Bulkhead with a message if r is a failure.
+# Stops web3signer_bend with a message if r is a failure.
 def Load.need(-A: Data, ctx: String, r: Result<&2, &2, String, A>) -> IO(A):
   match r:
     case Fail{e}:
@@ -263,7 +263,7 @@ def Load.ctx.fin(-A: Type, ctx: String, r: Result<&1, &1, U32 & String, A>) -> I
     case Done{x}:
       IO.pure(A, x)
 
-# Runs a fallible effect. If it fails, stops Bulkhead with ctx and the error.
+# Runs a fallible effect. If it fails, stops web3signer_bend with ctx and the error.
 def Load.ctx(-A: Type, ctx: String, act: IO(Result<&1, &1, U32 & String, A>)) -> IO(A):
   IO.bind(Result<&1, &1, U32 & String, A>, A, act, r => Load.ctx.fin(A, ctx, r))
 
@@ -333,7 +333,7 @@ def Keys.key_type(t: Maybe<&2, String>) -> Result<&2, &2, String, Unit>:
 def Keys.load_kind(+dir: String, +name: String, +fields: J.Json, +kind: String) -> IO(Loaded):
   Bool.pick(IO(Loaded), String.eq(kind, "file-keystore"), Keys.load_keystore(dir, name, fields),
   Bool.pick(IO(Loaded), String.eq(kind, "file-raw"), Keys.load_raw(name, fields),
-    IO.die(Loaded, 1, name ++ ": unsupported key type " ++ kind ++ ": Bulkhead supports file-keystore and file-raw")))
+    IO.die(Loaded, 1, name ++ ": unsupported key type " ++ kind ++ ": web3signer_bend supports file-keystore and file-raw")))
 
 def Keys.load_file(+dir: String, +name: String) -> IO(Loaded):
   do IO<Loaded>:

@@ -3,10 +3,10 @@ name = "lh-signer-tests"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Lighthouse's web3signer_tests, adapted to run the Lighthouse validator store against Bulkhead."
+description = "Lighthouse's web3signer_tests, adapted to run the Lighthouse validator store against web3signer_bend."
 
-# The path dependencies expect a Lighthouse checkout next to the bulkhead
-# checkout: ../lighthouse from the bulkhead root.
+# The path dependencies expect a Lighthouse checkout next to the web3signer_bend
+# checkout: ../lighthouse from the web3signer_bend root.
 [dev-dependencies]
 account_utils = { path = "../../../lighthouse/common/account_utils" }
 async-channel = "1.9.0"

@@ -1,19 +1,19 @@
-//! Lighthouse's `testing/web3signer_tests`, adapted to Bulkhead.
+//! Lighthouse's `testing/web3signer_tests`, adapted to web3signer_bend.
 //!
 //! Each test runs two Lighthouse `ValidatorStore`s on one key: one with a
-//! local keystore, and one with Bulkhead as its Web3Signer. The two must give
+//! local keystore, and one with web3signer_bend as its Web3Signer. The two must give
 //! the same signed objects.
 //!
 //! The differences from the Lighthouse harness:
-//! - The rig starts Bulkhead (`BULKHEAD_BIN`, or `build/bulkhead`) over plain
-//!   HTTP. Bulkhead has no TLS.
-//! - Bulkhead supports all the types that the Lighthouse VC signs through a
+//! - The rig starts web3signer_bend (`WEB3SIGNER_BEND_BIN`, or `build/web3signer_bend`) over plain
+//!   HTTP. web3signer_bend has no TLS.
+//! - web3signer_bend supports all the types that the Lighthouse VC signs through a
 //!   Web3Signer, except blocks before Bellatrix. Those must fail, not sign.
 //!   The phase 2 test adds Electra aggregates and voluntary exits before and
 //!   after Deneb, which the Lighthouse harness does not test.
-//! - Bulkhead gets the network's own config.yaml, as its fork versions and
+//! - web3signer_bend gets the network's own config.yaml, as its fork versions and
 //!   epochs select the aggregate shape and the exit domain.
-//! - Bulkhead always does slashing protection. The Lighthouse harness runs
+//! - web3signer_bend always does slashing protection. The Lighthouse harness runs
 //!   Web3Signer without it, so there a slashable message is signed when
 //!   Lighthouse's own protection is off. Here it must never be signed.
 //!
@@ -78,9 +78,9 @@ fn testing_keypair() -> Keypair {
     Keypair::from_components(pk, sk)
 }
 
-fn bulkhead_binary() -> PathBuf {
-    std::env::var("BULKHEAD_BIN").map(PathBuf::from).unwrap_or_else(|_| {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../build/bulkhead")
+fn web3signer_bend_binary() -> PathBuf {
+    std::env::var("WEB3SIGNER_BEND_BIN").map(PathBuf::from).unwrap_or_else(|_| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../build/web3signer_bend")
     })
 }
 
@@ -88,8 +88,8 @@ fn free_port() -> u16 {
     TcpListener::bind((LISTEN_ADDRESS, 0)).unwrap().local_addr().unwrap().port()
 }
 
-/// A live Bulkhead process with one keystore.
-struct BulkheadRig {
+/// A live web3signer_bend process with one keystore.
+struct Web3signerBendRig {
     keystore_path: PathBuf,
     dir: TempDir,
     port: u16,
@@ -97,14 +97,14 @@ struct BulkheadRig {
     url: Url,
 }
 
-impl Drop for BulkheadRig {
+impl Drop for Web3signerBendRig {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
 
-impl BulkheadRig {
+impl Web3signerBendRig {
     async fn new(network: &str) -> Self {
         let dir = TempDir::new().unwrap();
         let keys = dir.path().join("keys");
@@ -130,7 +130,7 @@ impl BulkheadRig {
     }
 
     async fn start(dir: TempDir, keystore_path: PathBuf, port: u16) -> Self {
-        let child = Command::new(bulkhead_binary())
+        let child = Command::new(web3signer_bend_binary())
             .arg("--key-config-path")
             .arg(dir.path().join("keys"))
             .arg("--slashing-log")
@@ -144,14 +144,14 @@ impl BulkheadRig {
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .spawn()
-            .expect("start bulkhead: build it with scripts/build.sh, or set BULKHEAD_BIN");
+            .expect("start web3signer_bend: build it with scripts/build.sh, or set WEB3SIGNER_BEND_BIN");
         let url = Url::parse(&format!("http://{LISTEN_ADDRESS}:{port}")).unwrap();
         let rig = Self { keystore_path, dir, port, child, url };
         rig.wait_until_up().await;
         rig
     }
 
-    /// Stops Bulkhead and starts it again on the same key and log.
+    /// Stops web3signer_bend and starts it again on the same key and log.
     async fn restart(mut self) -> Self {
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -170,7 +170,7 @@ impl BulkheadRig {
             if matches!(up, Ok(r) if r.status().is_success()) {
                 return;
             }
-            assert!(start.elapsed() < Duration::from_secs(30), "bulkhead did not start");
+            assert!(start.elapsed() < Duration::from_secs(30), "web3signer_bend did not start");
             sleep(Duration::from_millis(100)).await;
         }
     }
@@ -249,9 +249,9 @@ fn definition(signing_definition: SigningDefinition) -> ValidatorDefinition {
     }
 }
 
-/// A local store and a Bulkhead store for the same key.
+/// A local store and a web3signer_bend store for the same key.
 struct TestingRig {
-    bulkhead: BulkheadRig,
+    web3signer_bend: Web3signerBendRig,
     local: ValidatorStoreRig,
     remote: ValidatorStoreRig,
     pubkey: PublicKeyBytes,
@@ -262,15 +262,15 @@ type Store = Arc<LighthouseValidatorStore<TestingSlotClock, E>>;
 impl TestingRig {
     async fn new(network: &str, local_protection: bool) -> (Self, Arc<ChainSpec>) {
         let spec = Arc::new(Eth2NetworkConfig::constant(network).unwrap().unwrap().chain_spec::<E>().unwrap());
-        let bulkhead = BulkheadRig::new(network).await;
-        let rig = Self::with(bulkhead, local_protection, spec.clone()).await;
+        let web3signer_bend = Web3signerBendRig::new(network).await;
+        let rig = Self::with(web3signer_bend, local_protection, spec.clone()).await;
         (rig, spec)
     }
 
-    async fn with(bulkhead: BulkheadRig, local_protection: bool, spec: Arc<ChainSpec>) -> Self {
+    async fn with(web3signer_bend: Web3signerBendRig, local_protection: bool, spec: Arc<ChainSpec>) -> Self {
         let local = ValidatorStoreRig::new(
             definition(SigningDefinition::LocalKeystore {
-                voting_keystore_path: bulkhead.keystore_path.clone(),
+                voting_keystore_path: web3signer_bend.keystore_path.clone(),
                 voting_keystore_password_path: None,
                 voting_keystore_password: Some(KEYSTORE_PASSWORD.to_string().into()),
             }),
@@ -280,7 +280,7 @@ impl TestingRig {
         .await;
         let remote = ValidatorStoreRig::new(
             definition(SigningDefinition::Web3Signer(Web3SignerDefinition {
-                url: bulkhead.url.to_string(),
+                url: web3signer_bend.url.to_string(),
                 root_certificate_path: None,
                 request_timeout_ms: None,
                 client_identity_path: None,
@@ -290,13 +290,13 @@ impl TestingRig {
             spec,
         )
         .await;
-        Self { bulkhead, local, remote, pubkey: PublicKeyBytes::from(&testing_keypair().pk) }
+        Self { web3signer_bend, local, remote, pubkey: PublicKeyBytes::from(&testing_keypair().pk) }
     }
 
-    fn close(self) -> BulkheadRig {
+    fn close(self) -> Web3signerBendRig {
         self.local.shutdown();
         self.remote.shutdown();
-        self.bulkhead
+        self.web3signer_bend
     }
 
     /// Both stores must give the same signed object.
@@ -312,7 +312,7 @@ impl TestingRig {
         self
     }
 
-    /// The local store signs, and the Bulkhead store fails: Bulkhead does
+    /// The local store signs, and the web3signer_bend store fails: web3signer_bend does
     /// not support this type yet.
     async fn assert_unsupported<F, R, T>(self, case: &str, f: F) -> Self
     where
@@ -323,7 +323,7 @@ impl TestingRig {
         let a = f(self.pubkey, self.local.validator_store.clone()).await;
         let b = f(self.pubkey, self.remote.validator_store.clone()).await;
         assert!(a.is_ok(), "local store must sign {case}: {a:?}");
-        assert!(b.is_err(), "bulkhead must not sign unsupported {case}: {b:?}");
+        assert!(b.is_err(), "web3signer_bend must not sign unsupported {case}: {b:?}");
         self
     }
 
@@ -543,15 +543,15 @@ async fn slashing_protection(local_protection: bool) {
         .await
         .assert_block_refused("double_block", double_block.clone())
         .await;
-    let bulkhead = rig.close();
-    let log = bulkhead.log();
+    let web3signer_bend = rig.close();
+    let log = web3signer_bend.log();
     assert_eq!(log.lines().filter(|l| l.starts_with("A ")).count(), 1, "one attestation record:\n{log}");
     assert_eq!(log.lines().filter(|l| l.starts_with("B ")).count(), 1, "one block record:\n{log}");
 
     // After a restart, with fresh Lighthouse stores that have no history of
-    // their own, Bulkhead still refuses the double block.
-    let bulkhead = bulkhead.restart().await;
-    let rig = TestingRig::with(bulkhead, false, spec).await;
+    // their own, web3signer_bend still refuses the double block.
+    let web3signer_bend = web3signer_bend.restart().await;
+    let rig = TestingRig::with(web3signer_bend, false, spec).await;
     let unsigned = UnsignedBlock::Full(FullBlockContents::Block(double_block.clone()));
     let result = rig.remote.validator_store.sign_block(rig.pubkey, unsigned, double_block.slot()).await;
     assert!(result.is_err(), "double block after restart must not be signed");

@@ -132,7 +132,7 @@ def fork_version(fork, epoch):
     return prev if epoch < fork_epoch else cur
 
 
-# JSON, as Bulkhead reads it
+# JSON, as web3signer_bend reads it
 # ==========================
 
 class Num:
@@ -418,7 +418,7 @@ def model(s):
     return "0x" + r.hex()
 
 
-# Running Bulkhead
+# Running web3signer_bend
 # ================
 
 def run(body):
@@ -469,7 +469,7 @@ def compare(name, body):
     elif elapsed > TIME_LIMIT:
         fail(name, body, f"took {elapsed:.2f} s")
     elif got != want:
-        fail(name, body, f"bulkhead {result[:120]}, model {want}")
+        fail(name, body, f"web3signer_bend {result[:120]}, model {want}")
     else:
         passed += 1
         if got[0] == "OK":
@@ -554,7 +554,7 @@ class Raw:
 
 def dump(v, style):
     """JSON text for v. Raw values are written as they are. style picks the
-    spacing, so the model and Bulkhead also see unusual whitespace."""
+    spacing, so the model and web3signer_bend also see unusual whitespace."""
     sep, colon = style
     if isinstance(v, Raw):
         return v.text

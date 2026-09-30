@@ -5,7 +5,7 @@
 
 tests/vectors/lighthouse_requests.jsonl comes from tools/lh-vectors: the
 bodies are serialized by Lighthouse's own types, and each root is the
-signing root that Lighthouse computes. Bulkhead must accept each body with a
+signing root that Lighthouse computes. web3signer_bend must accept each body with a
 root and compute the same root, and reject each body without one.
 
 The mutation cases check the rules in docs/SPEC.md section 6.

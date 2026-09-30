@@ -1,10 +1,8 @@
-# Bulkhead
+# web3signer_bend
 
-[![ci](https://github.com/eserilev/bulkhead/actions/workflows/ci.yml/badge.svg)](https://github.com/eserilev/bulkhead/actions/workflows/ci.yml)
+[![ci](https://github.com/sigp/web3signer_bend/actions/workflows/ci.yml/badge.svg)](https://github.com/sigp/web3signer_bend/actions/workflows/ci.yml)
 
-Bulkhead is an Ethereum consensus-layer remote signer written in [Bend 2](https://github.com/bendlang/bend). It serves the eth2 signing API of Web3Signer. A validator client that works with Web3Signer works with Bulkhead with no change.
-
-A bulkhead is a wall that keeps one flooded part of a ship from sinking the rest. Bulkhead keeps validator keys and slashing rules apart from the validator client.
+web3signer_bend is an Ethereum consensus-layer remote signer written in [Bend 2](https://github.com/bendlang/bend). It serves the eth2 signing API of Web3Signer. A validator client that works with Web3Signer works with web3signer_bend with no change.
 
 ## Status
 
@@ -17,33 +15,33 @@ Phase 1 is complete. Phase 2 is in progress.
 
 ### What works with real clients
 
-- `tools/lh-signer-tests` runs Lighthouse's `web3signer_tests`, adapted to Bulkhead. Lighthouse's `ValidatorStore` gives the same signatures through Bulkhead as with a local keystore, on mainnet and Sepolia. This is true for randao, attestations, selection proofs, blocks from Bellatrix on, Base and Electra aggregates, sync committee messages, sync selection proofs, contributions, registrations, and exits before and after Deneb.
-- With Lighthouse's own slashing protection off, Bulkhead still refuses double votes, surround votes and double blocks, also after a restart.
-- On a Kurtosis devnet (`devnet/`), a Lighthouse validator client and a Teku validator client sign through Bulkhead. They hold two thirds of the stake. The chain finalizes, and their validators get full source, target and head rewards and propose blocks. With the milestone 2.1 build, both clients also publish aggregates, sync committee messages and contributions through Bulkhead. The validators get all their sync committee rewards, and the clients log no signing errors.
-- Bulkhead rejects blocks before Bellatrix, and the Gloas types of phase 3.
+- `tools/lh-signer-tests` runs Lighthouse's `web3signer_tests`, adapted to web3signer_bend. Lighthouse's `ValidatorStore` gives the same signatures through web3signer_bend as with a local keystore, on mainnet and Sepolia. This is true for randao, attestations, selection proofs, blocks from Bellatrix on, Base and Electra aggregates, sync committee messages, sync selection proofs, contributions, registrations, and exits before and after Deneb.
+- With Lighthouse's own slashing protection off, web3signer_bend still refuses double votes, surround votes and double blocks, also after a restart.
+- On a Kurtosis devnet (`devnet/`), a Lighthouse validator client and a Teku validator client sign through web3signer_bend. They hold two thirds of the stake. The chain finalizes, and their validators get full source, target and head rewards and propose blocks. With the milestone 2.1 build, both clients also publish aggregates, sync committee messages and contributions through web3signer_bend. The validators get all their sync committee rewards, and the clients log no signing errors.
+- web3signer_bend rejects blocks before Bellatrix, and the Gloas types of phase 3.
 
 ## Run
 
 You need clang, OpenSSL (`libcrypto`) and ICU (`libicuuc`).
 
 ```sh
-BEND=~/.bend/bin/bend scripts/build.sh main.bend build/bulkhead
-./build/bulkhead --key-config-path <dir> --slashing-log <file> [--network-config <config.yaml>] \
+BEND=~/.bend/bin/bend scripts/build.sh main.bend build/web3signer_bend
+./build/web3signer_bend --key-config-path <dir> --slashing-log <file> [--network-config <config.yaml>] \
   [--http-listen-host 127.0.0.1] [--http-listen-port 9000]
 ```
 
-The key directory uses the Web3Signer key-config format (`file-keystore` and `file-raw`). Bulkhead listens on 127.0.0.1 by default. It has no TLS: put a TLS proxy in front of it for remote clients.
+The key directory uses the Web3Signer key-config format (`file-keystore` and `file-raw`). web3signer_bend listens on 127.0.0.1 by default. It has no TLS: put a TLS proxy in front of it for remote clients.
 
 ### Lighthouse harness and devnet
 
 ```sh
-# Lighthouse's web3signer_tests against Bulkhead (needs ../lighthouse).
+# Lighthouse's web3signer_tests against web3signer_bend (needs ../lighthouse).
 cd tools/lh-signer-tests && cargo test --release
 
 # A devnet: build the image, patch ethereum-package, run Kurtosis.
-docker build -f docker/Dockerfile -t bulkhead:local .
+docker build -f docker/Dockerfile -t web3signer_bend:local .
 git -C <ethereum-package checkout> apply $PWD/devnet/ethereum-package-lighthouse-remote-signer.patch
-kurtosis run --enclave bulkhead <ethereum-package checkout> --args-file devnet/kurtosis.yaml
+kurtosis run --enclave web3signer_bend <ethereum-package checkout> --args-file devnet/kurtosis.yaml
 ```
 
 The patch lets ethereum-package give the Lighthouse validator client a remote signer. It applies to ethereum-package commit `c0db06b`. The image entrypoint (`docker/entrypoint.sh`) accepts the Web3Signer command line that ethereum-package uses.
@@ -90,7 +88,7 @@ The suites:
 | `tests/run_store.py` | Store decisions over many keys against a Python model, replay of the written log, log line round trips, and torn logs. |
 | `tests/run_keys.py` | Key loading: keystores and a raw key made by Lighthouse's own code, the EIP-2335 vectors, and bad key directories. |
 | `tests/run_server.py` | The server end to end: signing against independent root and signature oracles, slashing refusals, restarts, torn and corrupt logs, HTTP edge cases, and worst-case bodies near the 1 MiB limit. |
-| `tests/fuzz_requests.py` | Random changes to Lighthouse bodies. Bulkhead and a Python model of the spec must accept the same bodies and give the same roots, within 1 s each. |
+| `tests/fuzz_requests.py` | Random changes to Lighthouse bodies. web3signer_bend and a Python model of the spec must accept the same bodies and give the same roots, within 1 s each. |
 | `tests/run_crash.py` | SIGKILL at random times under conflicting load, with `tests/crash_shim.c` to drop writes that no fsync covered. No slashable pair gets signed, and each signed message is in the log. |
 
 `tools/lh-vectors` writes `tests/vectors/lighthouse_requests.jsonl`. It needs a Lighthouse checkout next to this one (`../lighthouse`).
@@ -98,13 +96,13 @@ The suites:
 ## Lighthouse harness and devnet
 
 ```sh
-# Lighthouse's web3signer_tests against Bulkhead (needs ../lighthouse).
+# Lighthouse's web3signer_tests against web3signer_bend (needs ../lighthouse).
 cd tools/lh-signer-tests && cargo test --release
 
 # A devnet: build the image, patch ethereum-package, run Kurtosis.
-docker build -f docker/Dockerfile -t bulkhead:local .
+docker build -f docker/Dockerfile -t web3signer_bend:local .
 git -C <ethereum-package checkout> apply $PWD/devnet/ethereum-package-lighthouse-remote-signer.patch
-kurtosis run --enclave bulkhead <ethereum-package checkout> --args-file devnet/kurtosis.yaml
+kurtosis run --enclave web3signer_bend <ethereum-package checkout> --args-file devnet/kurtosis.yaml
 ```
 
 The patch lets ethereum-package give the Lighthouse validator client a remote signer. It applies to ethereum-package commit `c0db06b`. The image entrypoint (`docker/entrypoint.sh`) accepts the Web3Signer command line that ethereum-package uses.
@@ -118,8 +116,8 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 ## What is different
 
 - The Bend checker proves the slashing rules (`LAWS.bend`).
-- Bulkhead signs only a root that it computes itself from the request.
-- Bulkhead writes each slashing record to disk, with `fsync`, before it returns the signature.
+- web3signer_bend signs only a root that it computes itself from the request.
+- web3signer_bend writes each slashing record to disk, with `fsync`, before it returns the signature.
 
 ## Documents
 
@@ -127,4 +125,4 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 
 ## License
 
-Bulkhead is under the MIT license (`LICENSE`). `vendor/blst` is a copy of [blst](https://github.com/supranational/blst) v0.3.17, under its own Apache-2.0 license (`vendor/blst/LICENSE`).
+web3signer_bend is under the MIT license (`LICENSE`). `vendor/blst` is a copy of [blst](https://github.com/supranational/blst) v0.3.17, under its own Apache-2.0 license (`vendor/blst/LICENSE`).

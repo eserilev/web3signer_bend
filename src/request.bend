@@ -1,7 +1,7 @@
 # Sign requests: the JSON body of POST /api/v1/eth2/sign/{pubkey}, decoded
-# into a typed request, and the signing root that Bulkhead computes for it.
+# into a typed request, and the signing root that web3signer_bend computes for it.
 #
-# Bulkhead supports ATTESTATION, BLOCK_V2 (Bellatrix and later, header only),
+# web3signer_bend supports ATTESTATION, BLOCK_V2 (Bellatrix and later, header only),
 # RANDAO_REVEAL, AGGREGATION_SLOT, AGGREGATE_AND_PROOF(_V2),
 # SYNC_COMMITTEE_MESSAGE, SYNC_COMMITTEE_SELECTION_PROOF,
 # SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF, VOLUNTARY_EXIT and
@@ -281,7 +281,7 @@ def Str.is(+s: String, name: String) -> Bool:
 # ========
 
 # The block versions that send only block_header. Phase0 and Altair send the
-# full block, which Bulkhead does not support.
+# full block, which web3signer_bend does not support.
 def Dec.header_version(+v: String) -> Bool:
   Str.is(v, "BELLATRIX") || Str.is(v, "CAPELLA") || Str.is(v, "DENEB") || Str.is(v, "ELECTRA")
     || Str.is(v, "FULU") || Str.is(v, "GLOAS") || Str.is(v, "HEZE")
@@ -548,7 +548,7 @@ def Dec.fork_info(+body: J.Json) -> Result<&2, &2, String, ForkInfo>:
     return ForkInfo{fork, gvr}
 
 # A validator registration has no fork_info: its domain uses the genesis
-# fork version and a zero root. Bulkhead ignores fork_info if the body has
+# fork version and a zero root. web3signer_bend ignores fork_info if the body has
 # one.
 def Dec.fork_info_for(reg: Bool, +body: J.Json) -> Result<&2, &2, String, ForkInfo>:
   match reg:
@@ -682,7 +682,7 @@ def Msg.object_root(m: Msg) -> S.B32:
     case MRegistration{r, g}:
       S.Registration.root(r)
 
-# The root that Bulkhead signs. It depends only on the request, never on
+# The root that web3signer_bend signs. It depends only on the request, never on
 # the claimed signingRoot.
 def Request.signing_root(r: Request, log_spe: Nat) -> S.B32:
   match r:

@@ -4,7 +4,7 @@
 #
 # Loads the directory. For each key, prints its public key and its
 # signature of the root 0x4242...42. A key that does not load stops the
-# program with an error, as it stops Bulkhead.
+# program with an error, as it stops web3signer_bend.
 import Base
 import ../src/ssz.bend as S
 import ../src/ffi.bend as F

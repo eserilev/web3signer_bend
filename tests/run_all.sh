@@ -18,7 +18,7 @@ for name in ssz_cli laws_cli json_cli request_cli store_cli; do
 done
 # Programs with foreign effects need scripts/build.sh.
 BEND="$bend" "$root/scripts/build.sh" "$root/tests/keys_cli.bend" "$root/build/tests/keys_cli"
-BEND="$bend" "$root/scripts/build.sh" "$root/main.bend" "$root/build/bulkhead"
+BEND="$bend" "$root/scripts/build.sh" "$root/main.bend" "$root/build/web3signer_bend"
 BEND="$bend" "$root/spike/phase0/build.sh" >/dev/null
 
 echo "== ssz";      "$root/tests/run_ssz.py" "$vectors"

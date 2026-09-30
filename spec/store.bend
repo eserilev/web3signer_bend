@@ -1,4 +1,4 @@
-# Definitions for the store laws of Bulkhead. DRAFT for review: the owner of
+# Definitions for the store laws of web3signer_bend. DRAFT for review: the owner of
 # LAWS.bend owns this file too, and the code does not edit it.
 import Base
 import ../src/ssz.bend as S

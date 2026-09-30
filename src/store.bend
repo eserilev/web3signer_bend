@@ -205,7 +205,7 @@ def Store.decide.pre(+msg: R.Msg, +g: S.B32, have: Maybe<&2, S.B32>) -> Maybe<&2
     case R.MExit{e, c, d}:
       Store.decide.gvr(g, have)
 
-# The decision for one request. root is the signing root that Bulkhead
+# The decision for one request. root is the signing root that web3signer_bend
 # computed for it (Request.check).
 def Store.decide(s: Store, +key: S.Pubkey, r: R.Request, +root: S.B32) -> Outcome:
   match s:

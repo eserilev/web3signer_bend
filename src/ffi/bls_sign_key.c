@@ -1,7 +1,7 @@
 // Bls.sign_key: signs a 32-byte root with key index, on a helper thread.
 // Returns the compressed signature as 0x hex.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 typedef struct {
   uint32_t index;

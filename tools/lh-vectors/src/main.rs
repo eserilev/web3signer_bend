@@ -8,7 +8,7 @@
 //! `validator_client/signing_method/src/web3signer.rs::SigningRequest`.
 //!
 //! Output: one JSON object per line, `{"kind", "body", "root"}`. `root` is
-//! null when Bulkhead must reject the body. The first line has kind
+//! null when web3signer_bend must reject the body. The first line has kind
 //! `CONFIG`: its body is the network config of the phase 2 cases, as a JSON
 //! object of config.yaml strings.
 //!
@@ -383,7 +383,7 @@ fn main() {
             &Web3SignerObject::AggregationSlot { slot }), Some(root));
 
         // BLOCK_V2, for each fork. Phase0 and Altair send the full block,
-        // which Bulkhead rejects.
+        // which web3signer_bend rejects.
         for fork_name in ForkName::list_all() {
             let block_spec = fork_name.make_genesis_spec(E::default_spec());
             let mut block = BeaconBlock::<E, FullPayload<E>>::empty(&block_spec);
@@ -409,7 +409,7 @@ fn main() {
 /// `<dir>/good` holds keystores (scrypt and pbkdf2, with ASCII and non-ASCII
 /// passwords) and a raw key. `expected.jsonl` has one line per key: its
 /// public key, and its signature of the root `ROOT`. Each directory under
-/// `<dir>/bad_*` holds one key that Bulkhead must refuse to load.
+/// `<dir>/bad_*` holds one key that web3signer_bend must refuse to load.
 mod keys {
     use bls::SecretKey;
     use eth2_keystore::json_keystore::{HexBytes, Kdf, Pbkdf2, Prf, Scrypt};

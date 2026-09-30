@@ -1,7 +1,7 @@
 // Keys.decrypt: decrypts an EIP-2335 keystore and adds the key to the table.
 // The KDF runs on a helper thread: scrypt with n = 2^18 takes about a second.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 typedef struct {
   int scrypt;

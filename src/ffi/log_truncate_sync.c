@@ -1,8 +1,8 @@
 // Log.truncate_sync: cuts a file to size bytes, then calls fsync. At start,
-// Bulkhead uses it to remove a partial last line of the slashing log, so
+// web3signer_bend uses it to remove a partial last line of the slashing log, so
 // the next append starts on a new line.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 Term log_truncate_sync_run(Env e, Term* f, IoWork* w) {
   uint64_t n = 0;

@@ -1,10 +1,10 @@
-// Shared C code for the foreign effects of Bulkhead. Each effect file
+// Shared C code for the foreign effects of web3signer_bend. Each effect file
 // includes this header; the guard keeps one copy in the generated program.
 //
 // Secret keys live only here, in bk_keys. Bend code sees a key by its index.
 
-#ifndef BULKHEAD_FFI_H
-#define BULKHEAD_FFI_H
+#ifndef WEB3SIGNER_BEND_FFI_H
+#define WEB3SIGNER_BEND_FFI_H
 
 #include <arpa/inet.h>
 #include <dirent.h>

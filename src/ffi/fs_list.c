@@ -1,7 +1,7 @@
 // Fs.list: the names in a directory, sorted, one per line. Hidden names and
 // the . and .. entries are left out.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 static int fs_list_cmp(const void* a, const void* b) {
   return strcmp(*(char* const*)a, *(char* const*)b);

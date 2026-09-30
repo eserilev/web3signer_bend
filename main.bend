@@ -1,6 +1,6 @@
-# Bulkhead: an eth2 remote signer with the Web3Signer HTTP API.
+# web3signer_bend: an eth2 remote signer with the Web3Signer HTTP API.
 #
-#   bulkhead --key-config-path <dir> --slashing-log <file>
+#   web3signer_bend --key-config-path <dir> --slashing-log <file>
 #            [--network-config <config.yaml>] [--http-listen-host 127.0.0.1]
 #            [--http-listen-port 9000]
 #
@@ -28,7 +28,7 @@ def Config.default() -> Config:
   Config{None{}, None{}, None{}, "127.0.0.1", 9000}
 
 def Config.usage() -> String:
-  "usage: bulkhead --key-config-path <dir> --slashing-log <file> [--network-config <file>] "
+  "usage: web3signer_bend --key-config-path <dir> --slashing-log <file> [--network-config <file>] "
     ++ "[--http-listen-host <ipv4>] [--http-listen-port <port>]"
 
 def Config.set(c: Config, +flag: String, +v: String) -> Maybe<&2, Config>:
@@ -63,7 +63,7 @@ def Config.need(-A: Data, m: Maybe<&2, A>, why: String) -> IO(A):
       IO.pure(A, x)
 
 # The network: mainnet without --network-config, or the values that
-# Bulkhead needs from the config file.
+# web3signer_bend needs from the config file.
 def Config.net(path: Maybe<&2, String>) -> IO(R.Net):
   match path:
     case None{}:
@@ -176,7 +176,7 @@ type Job is Type:
         r : Result<&1, &1, U32 & String, Unit> <- F.Log.append_sync(path, St.Log.show(es))
         Core.written(r, es, reply, jobs, path, store)
 
-# If the log write fails, Bulkhead stops: the state on disk is not known,
+# If the log write fails, web3signer_bend stops: the state on disk is not known,
 # and a signer must not run on a state that it cannot trust.
 @unsafe def Core.written(r: Result<&1, &1, U32 & String, Unit>, +es: List<&2, St.LogEvent>, +reply: Chan(Verdict),
   +jobs: Chan(Job), +path: String, +store: St.Store) -> IO(Unit):
@@ -447,7 +447,7 @@ def Main.run(c: Config) -> IO(Unit):
         +jobs : Chan(Job) <- Chan.new(Job, 4096)
         IO.spawn(Unit, Core.loop(jobs, path, store))
         l : Listener <- K.Load.ctx(Listener, host, F.Net.listen(host, port))
-        IO.print("bulkhead: " ++ Nat.show(List.length(&2, K.Loaded, ks)) ++ " keys, listening on "
+        IO.print("web3signer_bend: " ++ Nat.show(List.length(&2, K.Loaded, ks)) ++ " keys, listening on "
           ++ host ++ ":" ++ U32.show(port))
         Accept.loop(l, Ctx{ks, Keys.json(ks), n}, jobs)
 def main() -> IO(Unit):

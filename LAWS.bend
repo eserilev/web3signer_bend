@@ -1,4 +1,4 @@
-# The laws of Bulkhead. DRAFT for review: the owner of this file writes and
+# The laws of web3signer_bend. DRAFT for review: the owner of this file writes and
 # approves it, and the code and PROOF.bend must satisfy it. The code does not
 # edit this file or spec/safety.bend.
 #
@@ -16,7 +16,7 @@ import ./spec/store.bend as Sto
 # L1-L2: the signing root
 # =======================
 #
-# The root that Bulkhead signs comes from the request object and fork_info,
+# The root that web3signer_bend signs comes from the request object and fork_info,
 # never from the root that the client claims. n is log2(SLOTS_PER_EPOCH).
 
 # L1: a check that passes gives the computed root and no other.

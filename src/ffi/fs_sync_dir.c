@@ -1,7 +1,7 @@
 // Fs.sync_dir: calls fsync on a directory, so that a new file in it stays
 // after a crash.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 Term fs_sync_dir_run(Env e, Term* f, IoWork* w) {
   uint64_t n = 0;

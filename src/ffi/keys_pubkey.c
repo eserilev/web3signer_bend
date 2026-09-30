@@ -1,6 +1,6 @@
 // Keys.pubkey: the compressed public key of key index, as 0x hex.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 Term keys_pubkey_run(Env e, Term* f, IoWork* w) {
   blst_scalar sk;

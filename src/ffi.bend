@@ -1,4 +1,4 @@
-# The foreign effects of Bulkhead. The C code is in src/ffi/. A build must
+# The foreign effects of web3signer_bend. The C code is in src/ffi/. A build must
 # compile the generated C with -I src/ffi and the blst include path, and link
 # libblst, libcrypto and libicuuc: see build.sh.
 #

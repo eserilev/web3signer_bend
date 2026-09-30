@@ -9,7 +9,7 @@
    password with control characters.
 2. tests/vectors/keys/bad_*: the program must stop with an error.
 3. The two EIP-2335 keystores in Lighthouse's own tests
-   (crypto/eth2_keystore/tests/eip2335_vectors.rs) must load. Bulkhead
+   (crypto/eth2_keystore/tests/eip2335_vectors.rs) must load. web3signer_bend
    checks the decrypted key against the keystore pubkey field.
 """
 import json

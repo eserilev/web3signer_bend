@@ -48,7 +48,7 @@ class Key:
 
     def block(self, slot, root):
         again = False
-        for s, r in reversed(self.blocks):  # newest first, as Bulkhead scans
+        for s, r in reversed(self.blocks):  # newest first, as web3signer_bend scans
             if s == slot:
                 if r != root:
                     return "R 412 double block proposal"
@@ -62,7 +62,7 @@ class Key:
         if source > target:
             return "R 412 source epoch after target epoch"
         again = False
-        for s, t, r in reversed(self.atts):  # newest first, as Bulkhead scans
+        for s, t, r in reversed(self.atts):  # newest first, as web3signer_bend scans
             if t == target:
                 if r != root:
                     return "R 412 double vote"

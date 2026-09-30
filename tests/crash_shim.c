@@ -1,12 +1,12 @@
 // An LD_PRELOAD shim for tests/run_crash.py: power loss for the slashing log.
 //
-// Writes to the file named by BULKHEAD_SHIM_LOG stay in memory until fsync.
+// Writes to the file named by WEB3SIGNER_BEND_SHIM_LOG stay in memory until fsync.
 // fsync writes them to the file, then syncs. close without fsync drops them.
 // So SIGKILL loses every write that no fsync covered, as a power loss does,
 // and the crash test covers the fsync-before-reply rule (law L6), not only
 // the write-before-reply order.
 //
-// BULKHEAD_SHIM_FSYNC_US adds a delay to each fsync, to make the time
+// WEB3SIGNER_BEND_SHIM_FSYNC_US adds a delay to each fsync, to make the time
 // between a write and its fsync longer.
 //
 // Build: cc -shared -fPIC -O2 -o crash_shim.so crash_shim.c -ldl -lpthread
@@ -44,7 +44,7 @@ static void init(void) {
 }
 
 static void track(const char *path, int fd) {
-  const char *log = getenv("BULKHEAD_SHIM_LOG");
+  const char *log = getenv("WEB3SIGNER_BEND_SHIM_LOG");
   if (fd >= 0 && fd < MAX_FD && log && strcmp(path, log) == 0) {
     pthread_mutex_lock(&lock);
     tracked[fd] = 1;
@@ -97,7 +97,7 @@ ssize_t write(int fd, const void *data, size_t n) {
 int fsync(int fd) {
   init();
   if (fd < 0 || fd >= MAX_FD || !tracked[fd]) return real_fsync(fd);
-  const char *delay = getenv("BULKHEAD_SHIM_FSYNC_US");
+  const char *delay = getenv("WEB3SIGNER_BEND_SHIM_FSYNC_US");
   if (delay) usleep((useconds_t)atoi(delay));
   pthread_mutex_lock(&lock);
   size_t done = 0;

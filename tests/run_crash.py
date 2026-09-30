@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Crash tests: Bulkhead killed with SIGKILL at random times.
+"""Crash tests: web3signer_bend killed with SIGKILL at random times.
 
     ./tests/run_crash.py [rounds] [seed]
 
@@ -11,16 +11,16 @@ After all the rounds:
 
 - No two messages that got a signature can be slashable together: no double
   vote, no surround vote, no double block. This holds across restarts only
-  if Bulkhead writes each record before it replies.
+  if web3signer_bend writes each record before it replies.
 - Each signed message has its record in the log.
-- Bulkhead starts again after each kill, also when the kill cut a line.
+- web3signer_bend starts again after each kill, also when the kill cut a line.
 
 SIGKILL keeps the data that write() gave to the kernel, so SIGKILL alone
 does not test fsync. tests/crash_shim.c fixes that: it holds each write to
 the log in memory until fsync, so a kill loses what no fsync covered, as a
-power loss does. Each fsync also waits 20 ms (BULKHEAD_SHIM_FSYNC_US), so
+power loss does. Each fsync also waits 20 ms (WEB3SIGNER_BEND_SHIM_FSYNC_US), so
 most kills land between a write and its fsync. With this delay the test
-finds a Bulkhead that replies before fsync; with no delay it does not.
+finds a web3signer_bend that replies before fsync; with no delay it does not.
 """
 import http.client
 import json
@@ -37,7 +37,7 @@ import time
 
 here = pathlib.Path(__file__).resolve().parent
 root = here.parent
-bulkhead = os.environ.get("BULKHEAD_BIN", str(root / "build/bulkhead"))
+web3signer_bend = os.environ.get("WEB3SIGNER_BEND_BIN", str(root / "build/web3signer_bend"))
 request_cli = str(root / "build/tests/request_cli")
 keys_dir = str(here / "vectors/keys/good")
 
@@ -105,12 +105,12 @@ port = free_port()
 shim = root / "build/crash_shim.so"
 subprocess.run([os.environ.get("CC", "cc"), "-shared", "-fPIC", "-O2", "-o", str(shim),
                 str(here / "crash_shim.c"), "-ldl", "-lpthread"], check=True)
-env = {**os.environ, "LD_PRELOAD": str(shim), "BULKHEAD_SHIM_LOG": str(log),
-       "BULKHEAD_SHIM_FSYNC_US": os.environ.get("BULKHEAD_SHIM_FSYNC_US", "20000")}
+env = {**os.environ, "LD_PRELOAD": str(shim), "WEB3SIGNER_BEND_SHIM_LOG": str(log),
+       "WEB3SIGNER_BEND_SHIM_FSYNC_US": os.environ.get("WEB3SIGNER_BEND_SHIM_FSYNC_US", "20000")}
 
 
 def start():
-    proc = subprocess.Popen([bulkhead, "--key-config-path", keys_dir, "--slashing-log", str(log),
+    proc = subprocess.Popen([web3signer_bend, "--key-config-path", keys_dir, "--slashing-log", str(log),
                              "--http-listen-port", str(port)],
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=env)
     for _ in range(200):

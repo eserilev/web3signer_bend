@@ -1,1 +1,1 @@
-//! See tests/bulkhead.rs.
+//! See tests/web3signer_bend.rs.

@@ -1,6 +1,6 @@
 // Fs.read_text: the whole content of a file as text.
 
-#include "bulkhead.h"
+#include "web3signer_bend.h"
 
 typedef struct {
   char* path;
