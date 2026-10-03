@@ -305,7 +305,7 @@ The first request that web3signer_bend signs sets the GVR: it writes a `G` event
 ### 8.6 Low watermarks
 
 - The first record for a key does not set a watermark.
-- An import raises a watermark to the lowest value in the imported data. It raises the watermark only if the new value is higher.
+- If a key has no watermark, an import sets it to the lowest value in the imported data for that key. An import does not change a watermark that exists. A watermark that an import raised above the lowest record of a later import refuses messages that the EIP-3076 "complete" test vectors expect to sign.
 - Pruning raises a watermark (section 8.8).
 - Nothing lowers a watermark.
 
@@ -340,8 +340,10 @@ Pruning keeps the last 250 epochs of attestation records and the last 250 × 32 
 web3signer_bend imports and exports interchange format version `"5"`.
 
 - An import with a GVR different from the database GVR fails, and nothing changes.
-- An import skips each record that conflicts with the state. It logs a warning for each skipped record.
-- An import never removes a record, and it never lowers a watermark.
+- An import is all or nothing. It skips each record that the state already has. If an imported record is slashable with the state, or with a record imported before it, or if an attestation has its source after its target, the import fails and nothing changes. The EIP-3076 test vectors allow an implementation to reject slashable data.
+- An import never removes a record, and it never lowers a watermark (laws L7 and L8).
+- `--slashing-protection-import <file>` imports a file at start, before the server listens. The events go to the log with `fsync`. If the import fails, web3signer_bend does not start.
+- Export is not built yet.
 
 ## 9. Configuration
 
@@ -394,6 +396,7 @@ Version 1 has these flags:
 | `--network-config <file>` | The network configuration of section 9.1. |
 | `--key-config-path <dir>` | The key directory of section 9.2. |
 | `--slashing-log <file>` | The log file of section 8.7. |
+| `--slashing-protection-import <file>` | An EIP-3076 interchange file to import at start (section 8.9). |
 | `--http-listen-host <ip>` | Default `127.0.0.1`. It must be an IPv4 address. |
 | `--http-listen-port <port>` | Default `9000`. |
 
@@ -409,7 +412,7 @@ A human writes `LAWS.bend` and owns it. The AI writes `PROOF.bend` and the code,
 > - L9 `watermark_monotone` is `block_respects_mark` and `att_respects_mark`. The `keeps_records` laws also state that a decision never changes a watermark.
 > - L11 `u64_model` is `u64_cmp` and `u64_show_read`. L12 `hex_roundtrip` is `b32_hex`. L13 `slot_epoch` is `u64_shrn`.
 > - `LAWS.bend` also has `accepts_own_root`, `block_signs_when_clear`, and `att_signs_when_clear`. These laws have no draft here.
-> - L7, L8, and L10 are not stated in `LAWS.bend` yet.
+> - L6 also has `event_roundtrip` and `log_roundtrip`. L10 is `write_before_sign` and `log_is_state`, two laws about the plan of the core task (`src/core.bend`). The IO loop that runs the plan is reviewed code.
 
 ### 10.1 Signing root
 
@@ -481,7 +484,7 @@ These facts come from the Bend 2 repository, version 2.0.27.
 
 1. **The checker.** The Bend README says that the compiler is 99% AI-written and not fully audited. It also says that the Lean model and `bend.ts` do not match. A proof is as strong as the checker that verifies it.
 2. **Foreign code.** BLS, keystore crypto, and `fsync` are C code that no law covers.
-3. **The shell.** The HTTP server, the channel routing, and L10 (if L10 stays a reviewed rule) are not proved.
+3. **The shell.** The HTTP server, the channel routing, and the IO loop that runs the core plan of L10 are not proved.
 4. **Side channels.** The pure Bend code is not constant-time. Only foreign code touches secret keys. Keystore decryption must be in foreign code for this reason.
 5. **Fork upgrades.** Each fork can add message types and SSZ types. web3signer_bend must add them before the fork epoch.
 6. **Throughput.** The core task calls `fsync` once for each signed record, one at a time. On one test machine, one request takes about 6.6 ms, and concurrent clients get about 290 signatures per second. Group commit (one `fsync` for several records) is the planned fix.
@@ -508,7 +511,7 @@ The fuzzer and the worst-case bodies found three faults that took time n^2 on a 
 |---|---|---|
 | 0 | Spike: blst inside a foreign effect. Sign one root. | The signature equals the signature from Lighthouse for the same key and root. **Done 2026-09-23**: 10/10 EF vectors, 200/200 random cases identical to Lighthouse. |
 | 1 | `U64`, SHA-256, SSZ for small containers, JSON, HTTP. Types: `RANDAO_REVEAL`, `ATTESTATION`, `AGGREGATION_SLOT`, `BLOCK_V2`. Slashing log. Laws L1 to L6, L9, and L11 to L13. | Lighthouse attests and proposes on a Kurtosis devnet through web3signer_bend. The patched `web3signer_tests` pass for these types. **Done 2026-09-24**: Lighthouse and Teku validator clients attest and propose through web3signer_bend on a Kurtosis devnet with two thirds of the stake, and the chain finalizes. The adapted `web3signer_tests` pass (`tools/lh-signer-tests`), with slashing tests that expect refusal. |
-| 2 | Sync committee types, Electra aggregates, exits, registrations. Interchange import and export. Pruning. `/healthcheck`. Laws L7, L8, and L10. | All `web3signer_tests` pass. The EIP-3076 vectors pass. **Milestone 2.1 (message types) done 2026-09-24**: all types of section 7.1 up to version 2, and Gloas aggregates from phase 3. 7296 `ssz_static` cases pass. Lighthouse gives the same roots for 2100 request bodies. The adapted `web3signer_tests` pass for all these types on mainnet and Sepolia. On the devnet, the Lighthouse and Teku validator clients sign aggregates, sync committee messages and contributions through web3signer_bend with no errors, and get full attestation and sync committee rewards. Next: milestone 2.2 (interchange, pruning, `/healthcheck`), then 2.3 (laws L7 and L8). |
+| 2 | Sync committee types, Electra aggregates, exits, registrations. Interchange import and export. Pruning. `/healthcheck`. Laws L7, L8, and L10. | All `web3signer_tests` pass. The EIP-3076 vectors pass. **Milestone 2.1 (message types) done 2026-09-24**: all types of section 7.1 up to version 2, and Gloas aggregates from phase 3. 7296 `ssz_static` cases pass. Lighthouse gives the same roots for 2100 request bodies. The adapted `web3signer_tests` pass for all these types on mainnet and Sepolia. On the devnet, the Lighthouse and Teku validator clients sign aggregates, sync committee messages and contributions through web3signer_bend with no errors, and get full attestation and sync committee rewards. **Interchange import and laws L7, L8 and L10 done 2026-10-03**: all 38 EIP-3076 vectors pass, and all 27 laws have proofs. Next: interchange export, pruning, `/healthcheck`. |
 | 3 | Gloas: progressive merkleization, Gloas aggregates, payload attestations, proposer preferences, envelopes. TLS. Keymanager API. | Lighthouse runs a Gloas devnet through web3signer_bend. |
 
 The envelope is the largest SSZ type in phase 3. It holds the full execution payload with its transactions, withdrawals, and execution requests.

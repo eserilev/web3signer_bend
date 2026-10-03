@@ -247,106 +247,129 @@ def LogEvent.show(e: LogEvent) -> String:
     case EBlock{k, r}:
       match r:
         case Slash.BlockRec{slot, root}:
-          "B " ++ S.Hex.pubkey(k) ++ " " ++ S.U64.show(slot) ++ " " ++ Log.root(root)
+          "B " ++ (S.Hex.pubkey(k) ++ (" " ++ (S.U64.show(slot) ++ (" " ++ Log.root(root)))))
     case EAtt{k, r}:
       match r:
         case Slash.AttRec{src, tgt, root}:
-          "A " ++ S.Hex.pubkey(k) ++ " " ++ S.U64.show(src) ++ " " ++ S.U64.show(tgt) ++ " " ++ Log.root(root)
+          "A " ++ (S.Hex.pubkey(k) ++ (" " ++ (S.U64.show(src) ++ (" " ++ (S.U64.show(tgt) ++ (" " ++ Log.root(root)))))))
     case EBlockMark{k, m}:
-      "WB " ++ S.Hex.pubkey(k) ++ " " ++ S.U64.show(m)
+      "WB " ++ (S.Hex.pubkey(k) ++ (" " ++ S.U64.show(m)))
     case EAttMark{k, m}:
       match m:
         case Slash.AttMark{src, tgt}:
-          "WA " ++ S.Hex.pubkey(k) ++ " " ++ S.U64.show(src) ++ " " ++ S.U64.show(tgt)
+          "WA " ++ (S.Hex.pubkey(k) ++ (" " ++ (S.U64.show(src) ++ (" " ++ S.U64.show(tgt)))))
 
-# A string split at one separator character: the finished pieces in reverse
-# order, and the current piece in reverse order.
-type Split is Data:
-  Split{done: List<&2, String>, cur: String}
+# The pieces of s between the separator characters, in order. An empty s
+# is one empty piece, and two separators in a row give an empty piece.
+def Piece.cons(c: Char, ps: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      [SCon{c, SNil{}}]
+    case Con{p, rest}:
+      Con{SCon{c, p}, rest}
 
-def Split.step(+sep: U32, st: Split, c: Char) -> Split:
-  match st:
-    case Split{+done, +cur}:
-      match c:
-        case Chr{+x}:
-          Bool.pick(Split, U32.is_eq(x, sep), Split{Con{String.reverse(cur), done}, ""},
-            Split{done, SCon{Chr{x}, cur}})
+def Pieces.add(at_sep: Bool, c: Char, ps: List<&2, String>) -> List<&2, String>:
+  match at_sep:
+    case True{}:
+      Con{"", ps}
+    case False{}:
+      Piece.cons(c, ps)
 
-def Split.go(s: String, +sep: U32, st: Split) -> Split:
+def Pieces(s: String, +sep: U32) -> List<&2, String>:
   match s:
     case SNil{}:
-      st
+      [""]
     case SCon{c, t}:
-      Split.go(t, sep, Split.step(sep, st, c))
+      match c:
+        case Chr{+x}:
+          Pieces.add(U32.is_eq(x, sep), Chr{x}, Pieces(t, sep))
 
 # Splits a line at single spaces. Two spaces give an empty word, which no
 # reader accepts.
-def Log.words.end(st: Split) -> List<&2, String>:
-  match st:
-    case Split{done, cur}:
-      List.reverse(&2, String, Con{String.reverse(cur), done})
-
 def Log.words(s: String) -> List<&2, String>:
-  Log.words.end(Split.go(s, 32, Split{[], ""}))
+  Pieces(s, 32)
+
+def Log.some_root(m: Maybe<&2, S.B32>) -> Maybe<&2, Maybe<&2, S.B32>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{x}:
+      Some{Some{x}}
 
 def Log.read_root(+s: String) -> Maybe<&2, Maybe<&2, S.B32>>:
-  Bool.pick(Maybe<&2, Maybe<&2, S.B32>>, String.eq(s, "-"), Some{None{}},
-    Maybe.map(&2, S.B32, Maybe<&2, S.B32>, x => Some{x}, S.Hex.read_b32(s)))
+  Bool.pick(Maybe<&2, Maybe<&2, S.B32>>, String.eq(s, "-"), Some{None{}}, Log.some_root(S.Hex.read_b32(s)))
+
+def Log.read.g1(m: Maybe<&2, S.B32>) -> Maybe<&2, LogEvent>:
+  match m:
+    case Some{root}:
+      Some{EGvr{root}}
+    case None{}:
+      None{}
 
 def Log.read.g(ws: List<&2, String>) -> Maybe<&2, LogEvent>:
   match ws:
     case Con{g, rest}:
       match rest:
         case Nil{}:
-          do Maybe<&2, LogEvent>:
-            root : S.B32 <- S.Hex.read_b32(g)
-            return EGvr{root}
+          Log.read.g1(S.Hex.read_b32(g))
         case Con{x, more}:
           None{}
     case Nil{}:
       None{}
 
+def Log.read.b3(mk: Maybe<&2, S.Pubkey>, ms: Maybe<&2, S.U64>, mr: Maybe<&2, Maybe<&2, S.B32>>) -> Maybe<&2, LogEvent>:
+  match mk ms mr:
+    case Some{key} Some{s} Some{r}:
+      Some{EBlock{key, Slash.BlockRec{s, r}}}
+    case _ _ _:
+      None{}
+
 def Log.read.b(ws: List<&2, String>) -> Maybe<&2, LogEvent>:
   match ws:
     case [k, slot, root]:
-      do Maybe<&2, LogEvent>:
-        key : S.Pubkey <- S.Hex.read_pubkey(k)
-        s : S.U64 <- S.U64.read(slot)
-        r : Maybe<&2, S.B32> <- Log.read_root(root)
-        return EBlock{key, Slash.BlockRec{s, r}}
+      Log.read.b3(S.Hex.read_pubkey(k), S.U64.read(slot), Log.read_root(root))
     case _:
+      None{}
+
+def Log.read.a4(mk: Maybe<&2, S.Pubkey>, ms: Maybe<&2, S.U64>, mt: Maybe<&2, S.U64>, mr: Maybe<&2, Maybe<&2, S.B32>>) -> Maybe<&2, LogEvent>:
+  match mk ms mt mr:
+    case Some{key} Some{s} Some{t} Some{r}:
+      Some{EAtt{key, Slash.AttRec{s, t, r}}}
+    case _ _ _ _:
       None{}
 
 def Log.read.a(ws: List<&2, String>) -> Maybe<&2, LogEvent>:
   match ws:
     case [k, src, tgt, root]:
-      do Maybe<&2, LogEvent>:
-        key : S.Pubkey <- S.Hex.read_pubkey(k)
-        s : S.U64 <- S.U64.read(src)
-        t : S.U64 <- S.U64.read(tgt)
-        r : Maybe<&2, S.B32> <- Log.read_root(root)
-        return EAtt{key, Slash.AttRec{s, t, r}}
+      Log.read.a4(S.Hex.read_pubkey(k), S.U64.read(src), S.U64.read(tgt), Log.read_root(root))
     case _:
+      None{}
+
+def Log.read.wb2(mk: Maybe<&2, S.Pubkey>, ms: Maybe<&2, S.U64>) -> Maybe<&2, LogEvent>:
+  match mk ms:
+    case Some{key} Some{s}:
+      Some{EBlockMark{key, s}}
+    case _ _:
       None{}
 
 def Log.read.wb(ws: List<&2, String>) -> Maybe<&2, LogEvent>:
   match ws:
     case [k, slot]:
-      do Maybe<&2, LogEvent>:
-        key : S.Pubkey <- S.Hex.read_pubkey(k)
-        s : S.U64 <- S.U64.read(slot)
-        return EBlockMark{key, s}
+      Log.read.wb2(S.Hex.read_pubkey(k), S.U64.read(slot))
     case _:
+      None{}
+
+def Log.read.wa3(mk: Maybe<&2, S.Pubkey>, ms: Maybe<&2, S.U64>, mt: Maybe<&2, S.U64>) -> Maybe<&2, LogEvent>:
+  match mk ms mt:
+    case Some{key} Some{s} Some{t}:
+      Some{EAttMark{key, Slash.AttMark{s, t}}}
+    case _ _ _:
       None{}
 
 def Log.read.wa(ws: List<&2, String>) -> Maybe<&2, LogEvent>:
   match ws:
     case [k, src, tgt]:
-      do Maybe<&2, LogEvent>:
-        key : S.Pubkey <- S.Hex.read_pubkey(k)
-        s : S.U64 <- S.U64.read(src)
-        t : S.U64 <- S.U64.read(tgt)
-        return EAttMark{key, Slash.AttMark{s, t}}
+      Log.read.wa3(S.Hex.read_pubkey(k), S.U64.read(src), S.U64.read(tgt))
     case _:
       None{}
 
@@ -373,29 +396,54 @@ def Log.show(es: List<&2, LogEvent>) -> String:
     case Nil{}:
       ""
     case Con{e, rest}:
-      LogEvent.show(e) ++ "\n" ++ Log.show(rest)
+      LogEvent.show(e) ++ ("\n" ++ Log.show(rest))
 
 # Splits text into complete lines and the text after the last newline.
 type Lines is Data:
   Lines{done: List<&2, String>, tail: String}
 
-def Log.lines.end(st: Split) -> Lines:
-  match st:
-    case Split{done, cur}:
-      Lines{List.reverse(&2, String, done), String.reverse(cur)}
+# The lines so far, from the end of the text: started is False until the
+# last piece, the text after the last newline, is in tail.
+type Lz is Data:
+  Lz{started: Bool, done: List<&2, String>, tail: String}
+
+def Lz.add(p: String, z: Lz) -> Lz:
+  match z:
+    case Lz{started, done, tail}:
+      match started:
+        case False{}:
+          Lz{True{}, [], p}
+        case True{}:
+          Lz{True{}, Con{p, done}, tail}
+
+def Lz.of(ps: List<&2, String>) -> Lz:
+  match ps:
+    case Nil{}:
+      Lz{False{}, [], ""}
+    case Con{p, rest}:
+      Lz.add(p, Lz.of(rest))
+
+def Lz.lines(z: Lz) -> Lines:
+  match z:
+    case Lz{started, done, tail}:
+      Lines{done, tail}
 
 def Log.lines(s: String) -> Lines:
-  Log.lines.end(Split.go(s, 10, Split{[], ""}))
+  Lz.lines(Lz.of(Pieces(s, 10)))
+
+def Log.cons(m: Maybe<&2, LogEvent>, ms: Maybe<&2, List<&2, LogEvent>>) -> Maybe<&2, List<&2, LogEvent>>:
+  match m ms:
+    case Some{e} Some{es}:
+      Some{Con{e, es}}
+    case _ _:
+      None{}
 
 def Log.read_lines(ls: List<&2, String>) -> Maybe<&2, List<&2, LogEvent>>:
   match ls:
     case Nil{}:
       Some{[]}
     case Con{l, rest}:
-      do Maybe<&2, List<&2, LogEvent>>:
-        e : LogEvent <- LogEvent.read(l)
-        es : List<&2, LogEvent> <- Log.read_lines(rest)
-        return Con{e, es}
+      Log.cons(LogEvent.read(l), Log.read_lines(rest))
 
 def Log.read.from_lines(ls: Lines) -> Maybe<&2, List<&2, LogEvent>>:
   match ls:

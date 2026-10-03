@@ -8,10 +8,11 @@ web3signer_bend is an Ethereum consensus-layer remote signer written in [Bend 2]
 
 Phase 1 is complete. Phase 2 is in progress.
 
-- Phase 1: SSZ, JSON, the slashing store and log, the server, and the Lighthouse harness and devnet. 17 of the 23 laws have proofs.
+- Phase 1: SSZ, JSON, the slashing store and log, the server, and the Lighthouse harness and devnet.
 - Milestone 2.1 (all message types up to Electra, and Gloas aggregates): complete.
-- Milestone 2.2 (EIP-3076 interchange, pruning, `/healthcheck`): not started.
-- Milestone 2.3 (laws L7 and L8): not started.
+- Milestone 2.2 (EIP-3076 interchange, pruning, `/healthcheck`): import is complete (`--slashing-protection-import`), and all 38 EIP-3076 test vectors pass. Export, pruning and `/healthcheck` are not started.
+- Milestone 2.3 (laws L7 and L8): complete.
+- All 27 laws in `LAWS.bend` have proofs.
 
 ### What works with real clients
 
@@ -48,7 +49,7 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 
 ## Laws with proofs
 
-17 of the 23 laws in `LAWS.bend` have proofs. The main result: from an empty state, one key never signs two messages that are slashable together, and a decision on one key never changes another key.
+All 27 laws in `LAWS.bend` have proofs. The main result: from an empty state, one key never signs two messages that are slashable together, and a decision on one key never changes another key. The state after a restart is the state before it, and an import keeps a safe key safe.
 
 | Group | Laws |
 |---|---|
@@ -56,9 +57,10 @@ The patch lets ethereum-package give the Lighthouse validator client a remote si
 | Slashing safety | `empty_safe`, `block_keeps_safe`, `att_keeps_safe`, `block_recorded`, `att_recorded`, `block_keeps_records`, `att_keeps_records` |
 | Watermarks | `block_respects_mark`, `att_respects_mark` |
 | Liveness | `block_signs_when_clear`, `att_signs_when_clear` |
-| Store | `store_att_is_key_decision`, `store_block_is_key_decision`, `store_other_keys` |
-
-The 6 open laws are about the log encoding and number encoding. The tests cover them.
+| Store and log | `store_att_is_key_decision`, `store_block_is_key_decision`, `store_other_keys`, `event_roundtrip`, `log_roundtrip` |
+| Import | `import_keeps_safe`, `import_monotone` |
+| Write before sign | `write_before_sign`, `log_is_state` |
+| Numbers and encoding | `u64_cmp`, `u64_show_read`, `b32_hex`, `u64_shrn` |
 
 [proof/README.md](proof/README.md) states each law in plain words, and lists what the proofs trust and what they do not cover.
 

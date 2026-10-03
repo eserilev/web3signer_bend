@@ -13,7 +13,7 @@ bend=${BEND:-bend}
 export BEND_NO_TELEMETRY=1
 
 mkdir -p "$root/build/tests"
-for name in ssz_cli laws_cli json_cli request_cli store_cli; do
+for name in ssz_cli laws_cli json_cli request_cli store_cli interchange_cli; do
   "$bend" "$root/tests/$name.bend" -o "$root/build/tests/$name" >/dev/null
 done
 # Programs with foreign effects need scripts/build.sh.
@@ -27,6 +27,17 @@ echo "== json";     "$root/tests/run_json.py"
 echo "== requests"; "$root/tests/run_requests.py"
 echo "== fuzz";     "$root/tests/fuzz_requests.py" 3000 7916
 echo "== store";    "$root/tests/run_store.py" 2000
+# The EIP-3076 vectors, at a fixed commit. Set INTERCHANGE_TESTS to use a
+# local copy of the tests/generated directory.
+if [ -z "${INTERCHANGE_TESTS:-}" ]; then
+  INTERCHANGE_TESTS="$root/build/interchange-tests/tests/generated"
+  if [ ! -d "$INTERCHANGE_TESTS" ]; then
+    rm -rf "$root/build/interchange-tests"
+    git clone -q https://github.com/eth-clients/slashing-protection-interchange-tests "$root/build/interchange-tests"
+    git -C "$root/build/interchange-tests" checkout -q bb7900688eecd287d8723154faac6addb5e63336
+  fi
+fi
+echo "== interchange"; "$root/tests/run_interchange.py" "$INTERCHANGE_TESTS"
 echo "== keys";     "$root/tests/run_keys.py" "${LIGHTHOUSE:-$root/../lighthouse}"
 echo "== server";   "$root/tests/run_server.py"
 echo "== crash";    "$root/tests/run_crash.py" 30

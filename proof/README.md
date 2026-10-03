@@ -12,7 +12,7 @@ The proofs cover the decision logic in pure Bend. They do not cover the HTTP she
 
 ## Status
 
-23 laws are stated. 17 laws have proofs. 6 laws are open.
+27 laws are stated. All 27 laws have proofs.
 
 ## The laws
 
@@ -71,10 +71,10 @@ The store holds the state of each key and the genesis validators root. Each deci
 | `store_att_is_key_decision` | proved | For its own key, a store decision on an attestation gives the same state as the decision for one key. |
 | `store_block_is_key_decision` | proved | For its own key, a store decision on a block gives the same state as the decision for one key. |
 | `store_other_keys` | proved | A decision on one key never changes the state of another key. |
-| `event_roundtrip` | open | A log line reads back as the event that wrote it. |
-| `log_roundtrip` | open | A log file reads back as its list of events. |
+| `event_roundtrip` | proved | A log line reads back as the event that wrote it. |
+| `log_roundtrip` | proved | A log file reads back as its list of events. |
 
-The first three laws carry the key-level laws to the full store. The two open laws give "the state after a restart is the state before it". Until they have proofs, the main claim across a restart depends on the tests (`tests/run_store.py`, `tests/run_crash.py`).
+The first three laws carry the key-level laws to the full store. The two log laws give "the state after a restart is the state before it". They cover the complete lines of a log file. The text after the last newline is a write that did not finish, and the reader drops it. `tests/run_crash.py` tests this case.
 
 The two store decision laws need the genesis validators root check to pass. If the root of the request is not the root of the database, the store refuses the request.
 
@@ -84,17 +84,34 @@ The two store decision laws need the genesis validators root check to pass. If t
 
 | Law | Status | What it states |
 |---|---|---|
-| `u64_cmp` | open | The `U64` order is the order of the numbers. |
-| `u64_show_read` | open | Decimal printing and parsing of a `U64` are inverses. |
-| `b32_hex` | open | Hex printing and parsing of a 32-byte value are inverses. |
-| `u64_shrn` | open | A shift right by `n` divides by `2^n`. `epoch_of(slot)` uses this shift. |
+| `u64_cmp` | proved | The `U64` order is the order of the numbers. |
+| `u64_show_read` | proved | Decimal printing and parsing of a `U64` are inverses. |
+| `b32_hex` | proved | Hex printing and parsing of a 32-byte value are inverses. |
+| `u64_shrn` | proved | A shift right by `n` divides by `2^n`. `epoch_of(slot)` uses this shift. |
 
-These proofs need lemmas about `U32` division, multiplication, and bit operations. The Bend base library does not have these lemmas yet. The test suites cover these laws (`tests/run_ssz.py`, `tests/run_store.py`).
+`U64.to_nat` reads the 64 bits of a `U64` as one word. This is the value `hi * 2^32 + lo`. The checker cannot expand a closed `2^32`, so the definition does not use it. The lemmas are in `proof/num.bend` (order, shift), `proof/dec.bend` (decimal) and `proof/hex.bend` (hex). The log lemmas are in `proof/log.bend`.
 
-### Not yet stated
+### Import (L7, L8)
 
-- **L10 `write_before_sign`**: web3signer_bend writes a record and runs `fsync` before it signs. `main.bend` keeps this order by its structure: the core task answers `Go` only after `Log.append_sync` returns, and a connection task signs only after `Go`. No law states it yet, because it is a law about `IO` terms.
-- **L7 `import_keeps_safe`** and **L8 `import_monotone`**: these are for EIP-3076 import. The import code does not exist yet (phase 2).
+An EIP-3076 import is all or nothing (`src/interchange.bend`). Each imported record goes through the definitions of `spec/safety.bend`, against the state with the records imported before it. A record that the state already has is skipped. A record that is slashable with the state, or an attestation with its source after its target, fails the whole import, and nothing changes. A key with no watermark gets the lowest imported values as its watermark. An existing watermark does not change.
+
+| Law | Status | What it states |
+|---|---|---|
+| `import_keeps_safe` | proved | If a key state is safe before an import, it is safe after it. |
+| `import_monotone` | proved | An import never removes a record, and never lowers a watermark. `spec/import.bend` defines this. |
+
+The EIP-3076 test vectors allow an implementation to reject an interchange that holds slashable data. `tests/run_interchange.py` runs all 38 vectors.
+
+### Write before sign (L10)
+
+The core task runs the plan of `src/core.bend`. A plan is a refusal, a grant, or a log write followed by the rest of the plan. `main.bend` runs the plan in order: a write is an append with `fsync`, and a grant answers `Go`, after which a connection task signs.
+
+| Law | Status | What it states |
+|---|---|---|
+| `write_before_sign` | proved | The plan writes at most once, and only before its reply. So a grant never comes before the write. |
+| `log_is_state` | proved | The state after a request is the state before it with the written events applied. So the state in memory is the replay of the log. |
+
+These laws are about the plan. The loop that runs the plan, and the rule that a connection task signs only after `Go`, are reviewed code. `tests/run_crash.py` tests them: it kills web3signer_bend during writes and holds each write until its `fsync` returns.
 
 ## What the proofs trust
 
@@ -109,9 +126,7 @@ These proofs need lemmas about `U32` division, multiplication, and bit operation
 
 - SHA-256 and the SSZ hash tree roots. The `ssz_static` vectors of the consensus spec test them.
 - The HTTP parser and the JSON parser. The fuzzer and the Lighthouse request bodies test them.
-- The order "write, then sign" (L10). The code structure keeps it, and `tests/run_crash.py` tests it.
-- The log file encoding and the restart (the open L6 laws).
-- The numbers and encoding laws (L11 to L13).
+- The loop that runs the plan of the core task, and the connection task that signs after `Go` (the IO part of L10). `tests/run_crash.py` tests them.
 
 ## How to check the proofs
 
@@ -131,7 +146,15 @@ If a law has no proof, the command fails. When every law holds, it prints `All t
 | `spec/safety.bend` | The meaning of "slashable" and "safe", from the consensus spec. |
 | `spec/signing.bend` | The terms for the signing-root laws. |
 | `spec/store.bend` | The terms for the store laws. |
+| `spec/import.bend` | The terms for the import laws. |
+| `spec/core.bend` | The terms for the write-before-sign laws. |
 | `PROOF.bend` | A proof of each law. |
 | `proof/lemmas.bend` | General lemmas about `Bool`, `Word`, `U32`, `U64`, `B32`, and `Pubkey`. |
+| `proof/num.bend` | `Word` against `Nat`, and `Nat` arithmetic: the order and shift laws. |
+| `proof/dec.bend` | The decimal law. |
+| `proof/hex.bend` | The hex law. |
+| `proof/log.bend` | The log laws. |
+| `proof/import.bend` | The import laws. |
+| `proof/core.bend` | The write-before-sign laws. |
 
 The code and `PROOF.bend` must satisfy `LAWS.bend` and `spec/`. The code does not edit these files.

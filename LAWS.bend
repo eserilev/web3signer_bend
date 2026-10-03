@@ -12,6 +12,10 @@ import ./src/request.bend as R
 import ./spec/signing.bend as Sig
 import ./src/store.bend as St
 import ./spec/store.bend as Sto
+import ./src/interchange.bend as I
+import ./spec/import.bend as Imp
+import ./src/core.bend as Co
+import ./spec/core.bend as Core
 
 # L1-L2: the signing root
 # =======================
@@ -219,11 +223,48 @@ law u64_shrn:
   for +a: S.U64
   {S.U64.to_nat(S.U64.shrn(n, a)) == Nat.div(S.U64.to_nat(a), Nat.pow(2n, n)) : Nat}
 
-# Not yet stated
-# ==============
+# L7-L8: EIP-3076 import
+# =======================
 #
-# These laws need code that does not exist yet:
-# - L10 write_before_sign. main.bend keeps this order by structure: the core
-#   task answers Go only after Log.append_sync returns, and a connection task
-#   signs only after Go. A law on IO terms can state it later.
-# - L7 import_keeps_safe and L8 import_monotone: EIP-3076 import (phase 2).
+# An import gives log events, and the store after it is Imp.after: apply_all
+# of the events, or the same store if the import fails (src/interchange.bend).
+
+# L7: an import keeps a safe key safe.
+law import_keeps_safe:
+  for +s: St.Store
+  for +ix: I.Interchange
+  for +key: S.Pubkey
+  for h: {Spec.safe(Sto.key_state(s, key)) == True{} : Bool}
+  {Spec.safe(Sto.key_state(I.Imp.after(s, ix), key)) == True{} : Bool}
+
+# L8: an import never removes a record and never lowers a watermark.
+law import_monotone:
+  for +s: St.Store
+  for +ix: I.Interchange
+  for +key: S.Pubkey
+  {Imp.keeps_up(Sto.key_state(s, key), Sto.key_state(I.Imp.after(s, ix), key)) == True{} : Bool}
+
+# L10: write before sign
+# ======================
+#
+# The core task runs the plan of src/core.bend in order: a write is an
+# append with fsync, and a grant answers Go, after which a connection task
+# signs. These laws are about the plan. The loop that runs it (main.bend) and
+# the rule that a connection task signs only after Go are reviewed code.
+
+# L10: the plan writes at most once, and only before its reply.
+law write_before_sign:
+  for +s: St.Store
+  for +key: S.Pubkey
+  for +r: R.Request
+  for +root: S.B32
+  {Core.write_first(Co.Core.plan(s, key, r, root)) == True{} : Bool}
+
+# L10: the state after a request is the state before it with the written
+# events applied. So the state in memory is the replay of the log.
+law log_is_state:
+  for +s: St.Store
+  for +key: S.Pubkey
+  for +r: R.Request
+  for +root: S.B32
+  {Co.Core.next(s, key, r, root) == St.Store.apply_all(Co.Plan.writes(Co.Core.plan(s, key, r, root)), s) : St.Store}

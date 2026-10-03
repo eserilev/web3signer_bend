@@ -9,6 +9,12 @@ import ./spec/signing.bend as Sig
 import ./src/store.bend as St
 import ./spec/store.bend as Sto
 import ./proof/lemmas.bend as Lm
+import ./proof/num.bend as N
+import ./proof/dec.bend as Dec
+import ./proof/hex.bend as H
+import ./proof/log.bend as Lg
+import ./proof/import.bend as PI
+import ./proof/core.bend as PC
 import ./LAWS.bend as Laws
 
 # L3
@@ -1556,3 +1562,45 @@ def Laws.att_keeps_safe(ks, source, target, root, h):
       safe_after_att(Slash.Att.decide(Slash.KeyState{bs, as, bm, am}, source, target, root), bs, as, bm, am,
         Slash.AttRec{source, target, Some{root}}, att_shape(Slash.KeyState{bs, as, bm, am}, source, target, root),
         att_clear.go(Bool.not(S.U64.is_lt(target, source)), source, target, {==}, bs, as, bm, am, root), h)
+
+# L7-L8: import
+# =============
+
+def Laws.import_keeps_safe(s, ix, key, h):
+  PI.import_keeps_safe(s, ix, key, h)
+
+def Laws.import_monotone(s, ix, key):
+  PI.import_monotone(s, ix, key)
+
+# L10: write before sign
+# ======================
+
+def Laws.write_before_sign(s, key, r, root):
+  PC.write_first_of(St.Store.decide(s, key, r, root))
+
+def Laws.log_is_state(s, key, r, root):
+  PC.log_of(s, St.Store.decide(s, key, r, root))
+
+# L11-L13
+# =======
+
+def Laws.u64_cmp(a, b):
+  N.U64.cmp_nat(a, b)
+
+def Laws.u64_shrn(n, a):
+  N.U64.shrn_nat(n, a)
+
+def Laws.u64_show_read(a):
+  Dec.U64.show_read(a)
+
+def Laws.b32_hex(x):
+  H.B32.hex_rt(x)
+
+# L6: the log
+# ===========
+
+def Laws.event_roundtrip(e):
+  Lg.Ev.rt(e)
+
+def Laws.log_roundtrip(es):
+  Lg.Log.rt(es)

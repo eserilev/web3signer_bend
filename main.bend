@@ -2,7 +2,7 @@
 #
 #   web3signer_bend --key-config-path <dir> --slashing-log <file>
 #            [--network-config <config.yaml>] [--http-listen-host 127.0.0.1]
-#            [--http-listen-port 9000]
+#            [--http-listen-port 9000] [--slashing-protection-import <file>]
 #
 # Tasks (docs/SPEC.md section 5):
 # - One core task owns the slashing store. It decides each request, appends
@@ -17,30 +17,34 @@ import ./src/store.bend as St
 import ./src/ffi.bend as F
 import ./src/keys.bend as K
 import ./src/http.bend as H
+import ./src/interchange.bend as I
+import ./src/core.bend as Co
 
 # Configuration
 # =============
 
 type Config is Data:
-  Config{network: Maybe<&2, String>, keys: Maybe<&2, String>, log: Maybe<&2, String>, host: String, port: U32}
+  Config{network: Maybe<&2, String>, keys: Maybe<&2, String>, log: Maybe<&2, String>, host: String, port: U32,
+    imports: Maybe<&2, String>}
 
 def Config.default() -> Config:
-  Config{None{}, None{}, None{}, "127.0.0.1", 9000}
+  Config{None{}, None{}, None{}, "127.0.0.1", 9000, None{}}
 
 def Config.usage() -> String:
   "usage: web3signer_bend --key-config-path <dir> --slashing-log <file> [--network-config <file>] "
-    ++ "[--http-listen-host <ipv4>] [--http-listen-port <port>]"
+    ++ "[--http-listen-host <ipv4>] [--http-listen-port <port>] [--slashing-protection-import <file>]"
 
 def Config.set(c: Config, +flag: String, +v: String) -> Maybe<&2, Config>:
   match c:
-    case Config{+n, +k, +l, +h, +p}:
-      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--network-config"), Some{Config{Some{v}, k, l, h, p}},
-      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--key-config-path"), Some{Config{n, Some{v}, l, h, p}},
-      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--slashing-log"), Some{Config{n, k, Some{v}, h, p}},
-      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--http-listen-host"), Some{Config{n, k, l, v, p}},
+    case Config{+n, +k, +l, +h, +p, +i}:
+      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--network-config"), Some{Config{Some{v}, k, l, h, p, i}},
+      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--key-config-path"), Some{Config{n, Some{v}, l, h, p, i}},
+      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--slashing-log"), Some{Config{n, k, Some{v}, h, p, i}},
+      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--http-listen-host"), Some{Config{n, k, l, v, p, i}},
+      Bool.pick(Maybe<&2, Config>, String.eq(flag, "--slashing-protection-import"), Some{Config{n, k, l, h, p, Some{v}}},
       Bool.pick(Maybe<&2, Config>, String.eq(flag, "--http-listen-port"),
-        Maybe.map(&2, U32, Config, x => Config{n, k, l, h, x}, U32.read(v)),
-        None{})))))
+        Maybe.map(&2, U32, Config, x => Config{n, k, l, h, x, i}, U32.read(v)),
+        None{}))))))
 
 def Config.parse(xs: List<String>, c: Config) -> Maybe<&2, Config>:
   match xs:
@@ -132,6 +136,28 @@ def Start.store(+path: String) -> IO(St.Store):
     u3 : Unit <- K.Load.ctx(Unit, Dir.of(path), F.Fs.sync_dir(Dir.of(path)))
     return St.Store.replay(es)
 
+# EIP-3076 import
+# ===============
+
+# Imports an interchange file into the store before the server starts. The
+# events go to the log with fsync, as for a decision. An import that fails
+# (another genesis validators root, or slashable data) stops the start, and
+# the log does not change.
+def Start.import(m: Maybe<&2, String>, +path: String, +store: St.Store) -> IO(St.Store):
+  match m:
+    case None{}:
+      IO.pure(St.Store, store)
+    case Some{+f}:
+      do IO<St.Store>:
+        +text : String <- K.Load.ctx(String, f, F.Fs.read_text(f))
+        ix : I.Interchange <- K.Load.need(I.Interchange, f, K.Need(I.Interchange, I.Interchange.read(text),
+          "not an EIP-3076 interchange file (format version 5)"))
+        +es : List<&2, St.LogEvent> <- K.Load.need(List<&2, St.LogEvent>, f, K.Need(List<&2, St.LogEvent>, I.Imp.run(store, ix),
+          "import refused: the genesis validators root is not the root of the slashing log, or the data is slashable"))
+        u : Unit <- K.Load.ctx(Unit, path, F.Log.append_sync(path, St.Log.show(es)))
+        IO.print("web3signer_bend: imported " ++ f ++ " (" ++ Nat.show(List.length(&2, St.LogEvent, es)) ++ " log events)")
+        return St.Store.apply_all(es, store)
+
 # The core task
 # =============
 
@@ -154,31 +180,30 @@ type Job is Type:
     case Some{job}:
       match job:
         case Job{key, req, root, +reply}:
-          Core.outcome(St.Store.decide(store, key, req, root), reply, jobs, path, store)
+          Core.run(Co.Core.plan(store, key, req, root), reply, jobs, path, store)
 
-@unsafe def Core.outcome(o: St.Outcome, +reply: Chan(Verdict), +jobs: Chan(Job), +path: String, +store: St.Store) -> IO(Unit):
-  match o:
-    case St.Refuse{c, why}:
+# Runs the plan of src/core.bend in order (law L10). A write appends the
+# events and calls fsync, and only then does the plan go on to its reply.
+# The state after the step is the written events applied, so the state in
+# memory is always the replay of the log.
+@unsafe def Core.run(p: Co.Plan, +reply: Chan(Verdict), +jobs: Chan(Job), +path: String, +store: St.Store) -> IO(Unit):
+  match p:
+    case Co.PRefuse{c, why}:
       do IO<Unit>:
         ok : Bool <- Chan.send(Verdict, reply, No{c, why})
         Core.loop(jobs, path, store)
-    case St.Sign{+es}:
-      Core.write(List.length(&2, St.LogEvent, es), es, reply, jobs, path, store)
-
-@unsafe def Core.write(n: Nat, +es: List<&2, St.LogEvent>, +reply: Chan(Verdict), +jobs: Chan(Job), +path: String, +store: St.Store) -> IO(Unit):
-  match n:
-    case 0n:
+    case Co.PGrant{}:
       do IO<Unit>:
         ok : Bool <- Chan.send(Verdict, reply, Go{})
         Core.loop(jobs, path, store)
-    case 1n+p:
+    case Co.PWrite{+es, n}:
       do IO<Unit>:
         r : Result<&1, &1, U32 & String, Unit> <- F.Log.append_sync(path, St.Log.show(es))
-        Core.written(r, es, reply, jobs, path, store)
+        Core.written(r, es, n, reply, jobs, path, store)
 
 # If the log write fails, web3signer_bend stops: the state on disk is not known,
 # and a signer must not run on a state that it cannot trust.
-@unsafe def Core.written(r: Result<&1, &1, U32 & String, Unit>, +es: List<&2, St.LogEvent>, +reply: Chan(Verdict),
+@unsafe def Core.written(r: Result<&1, &1, U32 & String, Unit>, +es: List<&2, St.LogEvent>, n: Co.Plan, +reply: Chan(Verdict),
   +jobs: Chan(Job), +path: String, +store: St.Store) -> IO(Unit):
   match r:
     case Fail{ce}:
@@ -186,9 +211,7 @@ type Job is Type:
         case (code, msg):
           IO.die(Unit, 1, "slashing log write failed, stopping: " ++ msg)
     case Done{u}:
-      do IO<Unit>:
-        ok : Bool <- Chan.send(Verdict, reply, Go{})
-        Core.loop(jobs, path, St.Store.apply_all(es, store))
+      Core.run(n, reply, jobs, path, St.Store.apply_all(es, store))
 
 # Requests
 # ========
@@ -437,13 +460,14 @@ def Conn.join(ps: List<&2, String>) -> String:
 
 def Main.run(c: Config) -> IO(Unit):
   match c:
-    case Config{net, kdir, lpath, +host, +port}:
+    case Config{net, kdir, lpath, +host, +port, imp}:
       do IO<Unit>:
         +dir : String <- Config.need(String, kdir, "--key-config-path is required")
         +path : String <- Config.need(String, lpath, "--slashing-log is required")
         n : R.Net <- Config.net(net)
         +ks : List<&2, K.Loaded> <- K.Keys.load_dir(dir)
-        store : St.Store <- Start.store(path)
+        loaded : St.Store <- Start.store(path)
+        store : St.Store <- Start.import(imp, path, loaded)
         +jobs : Chan(Job) <- Chan.new(Job, 4096)
         IO.spawn(Unit, Core.loop(jobs, path, store))
         l : Listener <- K.Load.ctx(Listener, host, F.Net.listen(host, port))

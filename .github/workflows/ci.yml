@@ -68,11 +68,10 @@ jobs:
       - name: Build and test
         run: tests/run_all.sh spec-tests/tests
 
-      # run_all.sh prints the proof result but does not fail on it. The
-      # checker must report exactly the open laws of LAWS.bend and nothing
-      # else. Lower the count here when a law gets its proof.
+      # run_all.sh prints the proof result but does not fail on it. Every
+      # law of LAWS.bend has a proof, so the checker must accept all of them.
       - name: Check proofs
         run: |
           out=$("$BEND" PROOF.bend 2>&1 | head -1 || true)
           echo "$out"
-          [ "$out" = "Error: 6 TODOs found." ]
+          [ "$out" = "All terms check." ]

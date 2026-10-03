@@ -98,10 +98,10 @@ def randao(epoch, gvr=GVR):
 
 
 class Server:
-    def __init__(self, log, port, keys=keys_dir):
+    def __init__(self, log, port, keys=keys_dir, extra=()):
         self.port = port
         self.proc = subprocess.Popen(
-            [web3signer_bend, "--key-config-path", keys, "--slashing-log", log, "--http-listen-port", str(port)],
+            [web3signer_bend, "--key-config-path", keys, "--slashing-log", log, "--http-listen-port", str(port), *extra],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         self.banner = self.proc.stdout.readline()
         for _ in range(100):
@@ -321,6 +321,49 @@ with open(log, "a") as f:
 s = Server(log, port)
 s.proc.wait(timeout=10)
 check("corrupt log: refuses to start", s.proc.returncode != 0)
+
+# EIP-3076 import at start (src/interchange.bend).
+def interchange(gvr, blocks=(), atts=()):
+    return json.dumps({"metadata": {"interchange_format_version": "5", "genesis_validators_root": gvr},
+                       "data": [{"pubkey": PK, "signed_blocks": [{"slot": str(b)} for b in blocks],
+                                 "signed_attestations": [{"source_epoch": str(a), "target_epoch": str(b)} for a, b in atts]}]})
+
+
+def import_checks(si, when):
+    check(f"{when}: imported block slot refused", si.sign(PK, block(500))[0] == 412)
+    check(f"{when}: block below watermark refused", si.sign(PK, block(499))[0] == 412)
+    check(f"{when}: imported attestation refused", si.sign(PK, att(50, 60))[0] == 412)
+    check(f"{when}: attestation below watermark refused", si.sign(PK, att(49, 61))[0] == 412)
+
+
+tmp_i = pathlib.Path(tempfile.mkdtemp())
+ilog = str(tmp_i / "slashing.log")
+good = tmp_i / "good.json"
+good.write_text(interchange(GVR, blocks=[500], atts=[(50, 60)]))
+si = Server(ilog, free_port(), extra=["--slashing-protection-import", str(good)])
+check("import: starts", si.proc.poll() is None and "imported" in si.banner, si.banner)
+import_checks(si, "import")
+expect_sig("import: block above", si.sign(PK, block(501)), PK, block(501))
+expect_sig("import: attestation above", si.sign(PK, att(60, 61)), PK, att(60, 61))
+si.stop()
+si = Server(ilog, free_port())
+check("import: restarts", si.proc.poll() is None, si.banner)
+import_checks(si, "after restart")
+si.stop()
+si = Server(ilog, free_port(), extra=["--slashing-protection-import", str(good)])
+check("import: same file again", si.proc.poll() is None and "imported" in si.banner, si.banner)
+si.stop()
+before = pathlib.Path(ilog).read_bytes()
+for name, text in [("slashable", interchange(GVR, atts=[(40, 70)])),
+                   ("wrong gvr", interchange("0x" + "22" * 32, blocks=[900])),
+                   ("not interchange", "{}")]:
+    f = tmp_i / "bad.json"
+    f.write_text(text)
+    proc = subprocess.run([web3signer_bend, "--key-config-path", keys_dir, "--slashing-log", ilog,
+                           "--http-listen-port", str(free_port()), "--slashing-protection-import", str(f)],
+                          capture_output=True, text=True, timeout=30)
+    check(f"import: {name} stops the start", proc.returncode != 0, proc.stdout + proc.stderr)
+    check(f"import: {name} leaves the log", pathlib.Path(ilog).read_bytes() == before)
 
 print(f"{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

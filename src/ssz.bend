@@ -19,11 +19,51 @@ def U64.zero() -> U64:
 def U64.from_u32(x: U32) -> U64:
   U64{0, x}
 
-# The value as a Nat: hi * 2^32 + lo. Laws use it; the running code does not.
-def U64.to_nat(a: U64) -> Nat:
+# The 64 bits of a, low bit first: the bits of lo, then the bits of hi.
+def Word.cat(m: Nat, +n: Nat, a: Word(m), b: Word(n)) -> Word(Nat.add(m, n)):
+  match m:
+    case 0n:
+      b
+    case 1n+p:
+      match a:
+        case WCon{x, t}:
+          WCon{x, Word.cat(p, n, t, b)}
+
+# The first m bits of a word of m + n bits, and the bits after them.
+def Word.lo(m: Nat, +n: Nat, w: Word(Nat.add(m, n))) -> Word(m):
+  match m:
+    case 0n:
+      WNil{}
+    case 1n+p:
+      match w:
+        case WCon{x, t}:
+          WCon{x, Word.lo(p, n, t)}
+
+def Word.hi(m: Nat, +n: Nat, w: Word(Nat.add(m, n))) -> Word(n):
+  match m:
+    case 0n:
+      w
+    case 1n+p:
+      match w:
+        case WCon{x, t}:
+          Word.hi(p, n, t)
+
+def U64.bits(a: U64) -> Word(64n):
   match a:
     case U64{h, l}:
-      Nat.add(Nat.mul(U32.to_nat(h), Nat.pow(2n, 32n)), U32.to_nat(l))
+      match h:
+        case U32{hw}:
+          match l:
+            case U32{lw}:
+              Word.cat(32n, 32n, lw, hw)
+
+def U64.of_bits(+w: Word(64n)) -> U64:
+  U64{U32{Word.hi(32n, 32n, w)}, U32{Word.lo(32n, 32n, w)}}
+
+# The value as a Nat: hi * 2^32 + lo, as the value of its 64 bits. Laws use
+# it; the running code does not.
+def U64.to_nat(a: U64) -> Nat:
+  Word.to_nat(64n, U64.bits(a))
 
 def U64.cmp.lo(hi: Cmp, lo: Cmp) -> Cmp:
   match hi:
@@ -69,9 +109,7 @@ def U64.shl1(a: U64) -> U64:
       U64{((h * 2 : U32) .|. (l / 2147483648 : U32) : U32), (l * 2 : U32)}
 
 def U64.shr1(a: U64) -> U64:
-  match a:
-    case U64{+h, l}:
-      U64{(h / 2 : U32), ((l / 2 : U32) .|. ((h .&. 1 : U32) * 2147483648 : U32) : U32)}
+  U64.of_bits(Word.shr(64n, U64.bits(a)))
 
 def U64.shrn(n: Nat, a: U64) -> U64:
   match n:
@@ -80,57 +118,204 @@ def U64.shrn(n: Nat, a: U64) -> U64:
     case 1n+p:
       U64.shr1(U64.shrn(p, a))
 
-# 2^64 - 1 divided by 10, rounded down: 0x1999999999999999.
-def U64.max_div10() -> U64:
-  U64{429496729, 2576980377}
+# Decimal
+# =======
+#
+# A decimal number is a list of digits, low digit first. Each digit is a Nat
+# below 10. show doubles the digits once for each bit, from the high bit
+# down. read halves the digits once for each bit, from the low bit up.
 
-# a * 10 + d, wrapping.
-def U64.mul10_add(+a: U64, d: U32) -> U64:
-  U64.add(U64.add(U64.shl1(U64.shl1(U64.shl1(a))), U64.shl1(a)), U64.from_u32(d))
+def Dec.bit(b: Bool) -> Nat:
+  match b:
+    case True{}:
+      1n
+    case False{}:
+      0n
 
-# a * 10 + d, or None if the result does not fit in 64 bits.
-def U64.mul10_add.checked.lim(+a: U64, d: U32, big: Bool) -> Maybe<&2, U64>:
+def Dec.val(ds: List<&2, Nat>) -> Nat:
+  match ds:
+    case Nil{}:
+      0n
+    case Con{d, r}:
+      Nat.add(d, Nat.mul(10n, Dec.val(r)))
+
+# x mod 10 and x div 10, for x below 20.
+def Dec.lo.go(big: Bool, +x: Nat) -> Nat:
   match big:
     case True{}:
-      None{}
+      Nat.sub(x, 10n)
     case False{}:
-      Some{U64.mul10_add(a, d)}
+      x
 
-def U64.mul10_add.checked.go(+a: U64, +d: U32, over: Bool, at_max: Bool) -> Maybe<&2, U64>:
-  match over:
-    case True{}:
-      None{}
-    case False{}:
-      match at_max:
+def Dec.lo(+x: Nat) -> Nat:
+  Dec.lo.go(Nat.is_le(10n, x), x)
+
+def Dec.hi(+x: Nat) -> Bool:
+  Nat.is_le(10n, x)
+
+# 2 * ds + c.
+def Dec.dbl(ds: List<&2, Nat>, c: Bool) -> List<&2, Nat>:
+  match ds:
+    case Nil{}:
+      match c:
         case True{}:
-          U64.mul10_add.checked.lim(a, d, U32.is_gt(d, 5))
+          [1n]
         case False{}:
-          Some{U64.mul10_add(a, d)}
+          []
+    case Con{d, r}:
+      +x = Nat.add(Dec.bit(c), Nat.double(d))
+      Con{Dec.lo(x), Dec.dbl(r, Dec.hi(x))}
 
-def U64.mul10_add.checked(+a: U64, +d: U32) -> Maybe<&2, U64>:
-  U64.mul10_add.checked.go(a, d, U64.is_gt(a, U64.max_div10()), U64.is_eq(a, U64.max_div10()))
+# x div 2 and x mod 2.
+def Dec.half(x: Nat) -> Nat:
+  match x:
+    case 0n:
+      0n
+    case 1n+p:
+      match p:
+        case 0n:
+          0n
+        case 1n+q:
+          1n+Dec.half(q)
 
-def Char.digit.if(+c: U32, ok: Bool) -> Maybe<&2, U32>:
+def Dec.odd(x: Nat) -> Bool:
+  match x:
+    case 0n:
+      False{}
+    case 1n+p:
+      Bool.not(Dec.odd(p))
+
+type Halved is Data:
+  Halved{q: List<&2, Nat>, odd: Bool}
+
+def Dec.halve.step(+d: Nat, h: Halved) -> Halved:
+  match h:
+    case Halved{q, odd}:
+      +x = Nat.add(d, Nat.mul(10n, Dec.bit(odd)))
+      Halved{Con{Dec.half(x), q}, Dec.odd(x)}
+
+# ds div 2 and ds mod 2.
+def Dec.halve(ds: List<&2, Nat>) -> Halved:
+  match ds:
+    case Nil{}:
+      Halved{[], False{}}
+    case Con{d, r}:
+      Dec.halve.step(d, Dec.halve(r))
+
+# The digits after the bits of w, high bit first, go into ds.
+def Dec.of_bits(n: Nat, w: Word(n), ds: List<&2, Nat>) -> List<&2, Nat>:
+  match n:
+    case 0n:
+      ds
+    case 1n+p:
+      match w:
+        case WCon{b, t}:
+          Dec.dbl(Dec.of_bits(p, t, ds), b)
+
+# The low n bits of ds, and the digits of the rest.
+type BitsN<n: Nat> is Data:
+  BitsN{w: Word(n), rest: List<&2, Nat>}
+
+def Dec.bits.con(-p: Nat, b: Bool, r: BitsN<p>) -> BitsN<1n+p>:
+  match r:
+    case BitsN{w, rest}:
+      BitsN{WCon{b, w}, rest}
+
+def Halved.q(h: Halved) -> List<&2, Nat>:
+  match h:
+    case Halved{q, odd}:
+      q
+
+def Halved.odd(h: Halved) -> Bool:
+  match h:
+    case Halved{q, odd}:
+      odd
+
+def Dec.to_bits(n: Nat, ds: List<&2, Nat>) -> BitsN<n>:
+  match n:
+    case 0n:
+      BitsN{WNil{}, ds}
+    case 1n+p:
+      +h = Dec.halve(ds)
+      Dec.bits.con(p, Halved.odd(h), Dec.to_bits(p, Halved.q(h)))
+
+def Dec.zero(ds: List<&2, Nat>) -> Bool:
+  match ds:
+    case Nil{}:
+      True{}
+    case Con{d, r}:
+      Nat.is_eq(d, 0n) && Dec.zero(r)
+
+def Dec.char(d: Nat) -> Char:
+  match d:
+    case 0n:
+      Chr{48}
+    case 1n:
+      Chr{49}
+    case 2n:
+      Chr{50}
+    case 3n:
+      Chr{51}
+    case 4n:
+      Chr{52}
+    case 5n:
+      Chr{53}
+    case 6n:
+      Chr{54}
+    case 7n:
+      Chr{55}
+    case 8n:
+      Chr{56}
+    case 9n:
+      Chr{57}
+    case _:
+      Chr{63}
+
+def Dec.digit.if(+x: U32, ok: Bool) -> Maybe<&2, Nat>:
   match ok:
     case True{}:
-      Some{(c - 48 : U32)}
+      Some{U32.to_nat((x - 48 : U32))}
     case False{}:
       None{}
 
-def Char.digit(c: Char) -> Maybe<&2, U32>:
+def Dec.digit(c: Char) -> Maybe<&2, Nat>:
   match c:
     case Chr{+x}:
-      Char.digit.if(x, Bool.and(U32.is_ge(x, 48), U32.is_le(x, 57)))
+      Dec.digit.if(x, Bool.and(U32.is_ge(x, 48), U32.is_le(x, 57)))
 
-def U64.read.go(s: String, +acc: U64) -> Maybe<&2, U64>:
+# The digits, high digit first, before acc.
+def Dec.str(ds: List<&2, Nat>, acc: String) -> String:
+  match ds:
+    case Nil{}:
+      acc
+    case Con{d, r}:
+      Dec.str(r, SCon{Dec.char(d), acc})
+
+# The digits of s, high digit first, onto acc: the low digit ends up first.
+def Dec.parse(s: String, acc: List<&2, Nat>) -> Maybe<&2, List<&2, Nat>>:
   match s:
     case SNil{}:
       Some{acc}
     case SCon{c, t}:
-      do Maybe<&2, U64>:
-        d : U32 <- Char.digit(c)
-        next : U64 <- U64.mul10_add.checked(acc, d)
-        U64.read.go(t, next)
+      do Maybe<&2, List<&2, Nat>>:
+        d : Nat <- Dec.digit(c)
+        Dec.parse(t, Con{d, acc})
+
+def U64.of_digits.fin(ok: Bool, +w: Word(64n)) -> Maybe<&2, U64>:
+  match ok:
+    case True{}:
+      Some{U64.of_bits(w)}
+    case False{}:
+      None{}
+
+def U64.of_digits.go(r: BitsN<64n>) -> Maybe<&2, U64>:
+  match r:
+    case BitsN{+w, rest}:
+      U64.of_digits.fin(Dec.zero(rest), w)
+
+# The value of ds, or None if it does not fit in 64 bits.
+def U64.of_digits(ds: List<&2, Nat>) -> Maybe<&2, U64>:
+  U64.of_digits.go(Dec.to_bits(64n, ds))
 
 # Parses a non-empty decimal string. Rejects other characters and values
 # that do not fit in 64 bits.
@@ -139,48 +324,20 @@ def U64.read(s: String) -> Maybe<&2, U64>:
     case SNil{}:
       None{}
     case SCon{c, t}:
-      U64.read.go(SCon{c, t}, U64.zero())
+      do Maybe<&2, U64>:
+        ds : List<&2, Nat> <- Dec.parse(SCon{c, t}, [])
+        U64.of_digits(ds)
 
-# a / 10 and a % 10. The low word goes through in 16-bit halves, so no
-# intermediate value exceeds 32 bits.
-def U64.div10(a: U64) -> U64:
-  match a:
-    case U64{+h, +l}:
-      +t1 = (((h % 10 : U32) * 65536 : U32) + (l / 65536 : U32) : U32)
-      +t2 = (((t1 % 10 : U32) * 65536 : U32) + (l .&. 65535 : U32) : U32)
-      U64{(h / 10 : U32), (((t1 / 10 : U32) * 65536 : U32) + (t2 / 10 : U32) : U32)}
-
-def U64.mod10(a: U64) -> U32:
-  match a:
-    case U64{h, +l}:
-      +t1 = (((h % 10 : U32) * 65536 : U32) + (l / 65536 : U32) : U32)
-      ((((t1 % 10 : U32) * 65536 : U32) + (l .&. 65535 : U32) : U32) % 10 : U32)
-
-def U64.show.push(zero: Bool, d: U32, acc: String) -> String:
-  match zero:
-    case True{}:
-      acc
-    case False{}:
-      SCon{Chr{(d + 48 : U32)}, acc}
-
-# Prepends one digit for each step while a is not zero.
-def U64.show.go(n: Nat, +a: U64, acc: String) -> String:
-  match n:
-    case 0n:
-      acc
-    case 1n+p:
-      U64.show.go(p, U64.div10(a), U64.show.push(U64.is_zero(a), U64.mod10(a), acc))
-
-def U64.show.fix(s: String) -> String:
-  match s:
-    case SNil{}:
+def Dec.show(ds: List<&2, Nat>) -> String:
+  match ds:
+    case Nil{}:
       "0"
-    case SCon{c, t}:
-      SCon{c, t}
+    case Con{d, r}:
+      Dec.str(Con{d, r}, "")
 
-# Decimal. A u64 has at most 20 digits.
-def U64.show(+a: U64) -> String:
-  U64.show.fix(U64.show.go(20n, a, ""))
+# Decimal, with no leading zero.
+def U64.show(a: U64) -> String:
+  Dec.show(Dec.of_bits(64n, U64.bits(a), []))
 
 # B32
 # ===
@@ -203,26 +360,63 @@ def B32.is_eq(a: B32, b: B32) -> Bool:
 # Hex
 # ===
 
-def Hex.digit.if(d: U32, low: Bool) -> Char:
-  match low:
-    case True{}:
-      Chr{(d + 48 : U32)}
-    case False{}:
-      Chr{(d + 87 : U32)}
+def Hex.nib(b0: Bool, b1: Bool, b2: Bool, b3: Bool) -> Char:
+  match b0 b1 b2 b3:
+    case False{} False{} False{} False{}:
+      Chr{48}
+    case True{} False{} False{} False{}:
+      Chr{49}
+    case False{} True{} False{} False{}:
+      Chr{50}
+    case True{} True{} False{} False{}:
+      Chr{51}
+    case False{} False{} True{} False{}:
+      Chr{52}
+    case True{} False{} True{} False{}:
+      Chr{53}
+    case False{} True{} True{} False{}:
+      Chr{54}
+    case True{} True{} True{} False{}:
+      Chr{55}
+    case False{} False{} False{} True{}:
+      Chr{56}
+    case True{} False{} False{} True{}:
+      Chr{57}
+    case False{} True{} False{} True{}:
+      Chr{97}
+    case True{} True{} False{} True{}:
+      Chr{98}
+    case False{} False{} True{} True{}:
+      Chr{99}
+    case True{} False{} True{} True{}:
+      Chr{100}
+    case False{} True{} True{} True{}:
+      Chr{101}
+    case True{} True{} True{} True{}:
+      Chr{102}
 
-def Hex.digit(+d: U32) -> Char:
-  Hex.digit.if(d, U32.is_lt(d, 10))
-
-# The last n hex digits of w, before acc.
-def Hex.word.go(n: Nat, +w: U32, acc: String) -> String:
-  match n:
+# The g hex digits of w before acc. A digit holds 4 bits of w, low bit
+# first, and the low digit of w ends up last.
+def Hex.ws(g: Nat, w: Word(Nat.mul(g, 4n)), acc: String) -> String:
+  match g:
     case 0n:
       acc
-    case 1n+p:
-      Hex.word.go(p, (w / 16 : U32), SCon{Hex.digit((w .&. 15 : U32)), acc})
+    case 1n+q:
+      match w:
+        case WCon{b0, t0}:
+          match t0:
+            case WCon{b1, t1}:
+              match t1:
+                case WCon{b2, t2}:
+                  match t2:
+                    case WCon{b3, t3}:
+                      Hex.ws(q, t3, SCon{Hex.nib(b0, b1, b2, b3), acc})
 
-def Hex.word(+w: U32, acc: String) -> String:
-  Hex.word.go(8n, w, acc)
+# The 8 hex digits of w before acc.
+def Hex.word(w: U32, acc: String) -> String:
+  match w:
+    case U32{x}:
+      Hex.ws(8n, x, acc)
 
 def Hex.b32(a: B32) -> String:
   match a:
@@ -313,22 +507,92 @@ def B32.push_nibble(acc: B32, d: U32) -> B32:
           ((a6 * 16 : U32) .|. (a7 / 268435456 : U32) : U32),
           ((a7 * 16 : U32) .|. d : U32)}
 
-def Hex.read_b32.go(n: Nat, s: String, acc: B32) -> Maybe<&2, B32>:
+def Word.to_list(n: Nat, w: Word(n)) -> List<&2, Bool>:
   match n:
     case 0n:
-      Hex.end(B32, s, acc)
+      []
     case 1n+p:
+      match w:
+        case WCon{b, t}:
+          Con{b, Word.to_list(p, t)}
+
+# The first n bits of bs as a word. Missing bits are 0.
+def Word.of_list(n: Nat, bs: List<&2, Bool>) -> Word(n):
+  match n:
+    case 0n:
+      WNil{}
+    case 1n+p:
+      match bs:
+        case Nil{}:
+          WCon{False{}, Word.of_list(p, [])}
+        case Con{b, r}:
+          WCon{b, Word.of_list(p, r)}
+
+def U32.of_list(+bs: List<&2, Bool>, +i: Nat) -> U32:
+  U32{Word.of_list(32n, List.drop(&2, Bool, bs, Nat.mul(i, 32n)))}
+
+# The 4 bits of a hex digit, low bit first.
+def Hex.bits.of(x: U32) -> List<&2, Bool>:
+  match x:
+    case U32{w}:
+      match w:
+        case WCon{b0, t0}:
+          match t0:
+            case WCon{b1, t1}:
+              match t1:
+                case WCon{b2, t2}:
+                  match t2:
+                    case WCon{b3, t3}:
+                      [b0, b1, b2, b3]
+
+def Hex.bits.if(m: Maybe<&2, U32>) -> Maybe<&2, List<&2, Bool>>:
+  match m:
+    case None{}:
+      None{}
+    case Some{x}:
+      Some{Hex.bits.of(x)}
+
+def Hex.bits(c: Char) -> Maybe<&2, List<&2, Bool>>:
+  Hex.bits.if(Hex.nibble(c))
+
+# The bits that the hex digits of a string give, and the rest of it.
+type HexRd is Data:
+  HexRd{bits: List<&2, Bool>, rest: String}
+
+# Reads k hex digits, high digit first. Each digit goes before the bits in
+# acc, so the bits end up low bit first.
+def Hex.rd(k: Nat, s: String, acc: List<&2, Bool>) -> Maybe<&2, HexRd>:
+  match k:
+    case 0n:
+      Some{HexRd{acc, s}}
+    case 1n+j:
       match s:
         case SNil{}:
           None{}
         case SCon{c, t}:
-          do Maybe<&2, B32>:
-            d : U32 <- Hex.nibble(c)
-            Hex.read_b32.go(p, t, B32.push_nibble(acc, d))
+          do Maybe<&2, HexRd>:
+            bs : List<&2, Bool> <- Hex.bits(c)
+            Hex.rd(j, t, List.append(&2, Bool, bs, acc))
+
+def B32.of_list(+bs: List<&2, Bool>) -> B32:
+  B32{U32.of_list(bs, 7n), U32.of_list(bs, 6n), U32.of_list(bs, 5n), U32.of_list(bs, 4n),
+    U32.of_list(bs, 3n), U32.of_list(bs, 2n), U32.of_list(bs, 1n), U32.of_list(bs, 0n)}
+
+def Hex.read_b32.fin(r: HexRd) -> Maybe<&2, B32>:
+  match r:
+    case HexRd{+bs, rest}:
+      Hex.end(B32, rest, B32.of_list(bs))
+
+def Hex.read_b32.if(m: Maybe<&2, HexRd>) -> Maybe<&2, B32>:
+  match m:
+    case None{}:
+      None{}
+    case Some{r}:
+      Hex.read_b32.fin(r)
 
 # Reads "0x" and exactly 64 hex digits.
 def Hex.read_b32(s: String) -> Maybe<&2, B32>:
-  Hex.read_b32.go(64n, Hex.strip(s), B32.zero())
+  Hex.read_b32.if(Hex.rd(64n, Hex.strip(s), []))
 
 def Hex.read_bytes4.go(n: Nat, s: String, +acc: U32) -> Maybe<&2, U32>:
   match n:
@@ -358,55 +622,26 @@ type B16 is Data:
 type Pubkey is Data:
   Pubkey{hi: B32, lo: B16}
 
-# A value read from the front of a string, and the rest of the string.
-type HexPart is Data:
-  HexPart{value: B32, rest: String}
-  HexNone{}
+def Pubkey.of_list(+bs: List<&2, Bool>) -> Pubkey:
+  Pubkey{B32{U32.of_list(bs, 11n), U32.of_list(bs, 10n), U32.of_list(bs, 9n), U32.of_list(bs, 8n),
+      U32.of_list(bs, 7n), U32.of_list(bs, 6n), U32.of_list(bs, 5n), U32.of_list(bs, 4n)},
+    B16{U32.of_list(bs, 3n), U32.of_list(bs, 2n), U32.of_list(bs, 1n), U32.of_list(bs, 0n)}}
 
-def Hex.take.end(bad: Bool, acc: B32, s: String) -> HexPart:
-  match bad:
-    case True{}:
-      HexNone{}
-    case False{}:
-      HexPart{acc, s}
+def Hex.read_pubkey.fin(r: HexRd) -> Maybe<&2, Pubkey>:
+  match r:
+    case HexRd{+bs, rest}:
+      Hex.end(Pubkey, rest, Pubkey.of_list(bs))
 
-# Reads n hex digits into the low end of acc, and keeps the rest of s. bad
-# records a character that is not a hex digit.
-def Hex.take.go(n: Nat, s: String, acc: B32, bad: Bool) -> HexPart:
-  match n:
-    case 0n:
-      Hex.take.end(bad, acc, s)
-    case 1n+p:
-      match s:
-        case SNil{}:
-          HexNone{}
-        case SCon{+c, t}:
-          Hex.take.go(p, t, B32.push_nibble(acc, Maybe.default(&2, U32, Hex.nibble(c), 0)),
-            bad || Maybe.is_none(&2, U32, Hex.nibble(c)))
-
-# 32 digits pushed into a B32 land in its low words w4..w7.
-def B16.low(b: B32) -> B16:
-  match b:
-    case B32{a0, a1, a2, a3, a4, a5, a6, a7}:
-      B16{a4, a5, a6, a7}
-
-def Hex.read_pubkey.lo(hi: B32, p: HexPart) -> Maybe<&2, Pubkey>:
-  match p:
-    case HexNone{}:
+def Hex.read_pubkey.if(m: Maybe<&2, HexRd>) -> Maybe<&2, Pubkey>:
+  match m:
+    case None{}:
       None{}
-    case HexPart{lo, rest}:
-      Hex.end(Pubkey, rest, Pubkey{hi, B16.low(lo)})
-
-def Hex.read_pubkey.hi(p: HexPart) -> Maybe<&2, Pubkey>:
-  match p:
-    case HexNone{}:
-      None{}
-    case HexPart{hi, rest}:
-      Hex.read_pubkey.lo(hi, Hex.take.go(32n, rest, B32.zero(), False{}))
+    case Some{r}:
+      Hex.read_pubkey.fin(r)
 
 # Reads "0x" and exactly 96 hex digits.
 def Hex.read_pubkey(s: String) -> Maybe<&2, Pubkey>:
-  Hex.read_pubkey.hi(Hex.take.go(64n, Hex.strip(s), B32.zero(), False{}))
+  Hex.read_pubkey.if(Hex.rd(96n, Hex.strip(s), []))
 
 def Hex.pubkey(k: Pubkey) -> String:
   match k:
